@@ -1,3 +1,4 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;600&display=swap">
 <title>Suppression de métadonnées</title>
@@ -258,6 +259,24 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 .fields label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
 .fileline { color: var(--muted); font-size: 13px; margin: 14px 0 0; overflow-wrap: anywhere; }
 .footer { margin-top: 28px; color: var(--muted); font-size: 12.5px; }
+/* Phones: stack the metadata rows, make the tabs and buttons full-width, tighten spacing. */
+@media (max-width: 560px) {
+  h1 { font-size: 20px; }
+  h2.sec { font-size: 16px; }
+  .tab { font-size: 13px; padding: 9px 4px; }
+  .drop { padding: 22px 14px; }
+  .btn { width: 100%; text-align: center; box-sizing: border-box; }
+  .fields { grid-template-columns: 1fr; }
+  .fields legend { font-size: 11px; }
+  .toolbar .btn, .toolbar .count { width: auto; }
+  .toolbar .search { flex-basis: 100%; }
+  .kv > div { grid-template-columns: 1fr; gap: 2px; padding: 8px 14px; }
+  .kv dd { font-size: 12px; }
+  .group > summary { padding: 10px 14px; }
+  .facts span:last-child { max-width: 62%; }
+  .card { padding: 14px; }
+  .sens-box .btn { width: 100%; }
+}
 </style>
 
 <div class="wrap">
