@@ -1,0 +1,1390 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;600&display=swap">
+<title>Suppression de métadonnées</title>
+<style>
+/* One page, two tools: "Extraire" (read every metadata block) and "Supprimer" (write a clean copy). */
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --fg: #1c1f1d;
+  --muted: #6a706c;
+  --line: #e0dfd9;
+  --accent: #1d6b62;
+  --accent-fg: #ffffff;
+  --warn: #8f5512;
+  --warn-bg: #f7ead8;
+  --ok: #2b6a3c;
+  --ok-bg: #e0f0e3;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131514;
+    --surface: #1c1f1d;
+    --fg: #e7eae8;
+    --muted: #98a09b;
+    --line: #2d3331;
+    --accent: #5ab3a7;
+    --accent-fg: #0e1412;
+    --warn: #e2a866;
+    --warn-bg: #3a2c1a;
+    --ok: #7fc692;
+    --ok-bg: #1c3322;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131514;
+  --surface: #1c1f1d;
+  --fg: #e7eae8;
+  --muted: #98a09b;
+  --line: #2d3331;
+  --accent: #5ab3a7;
+  --accent-fg: #0e1412;
+  --warn: #e2a866;
+  --warn-bg: #3a2c1a;
+  --ok: #7fc692;
+  --ok-bg: #1c3322;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+.wrap {
+  max-width: 880px;
+  margin: 0 auto;
+  padding-block: 28px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1 { font-size: 22px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0 0 18px; max-width: 60ch; }
+.panel-lede { color: var(--muted); margin: 0 0 16px; max-width: 60ch; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); }
+.tab:focus-visible, .btn:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.panel[hidden], .notice[hidden], .result[hidden] { display: none !important; }
+
+/* Drop zone */
+.drop {
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 28px 20px;
+  text-align: center;
+  transition: border-color .15s, background .15s;
+}
+.drop.over { border-color: var(--accent); background: var(--ok-bg); }
+.drop p { margin: 0 0 14px; color: var(--muted); }
+.btn {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 18px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+#fileExtract, #fileStrip { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.notice {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+/* Strip panel */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+.card h3 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+.thumb { display: block; max-width: 100%; height: auto; border-radius: 6px; background: var(--bg); }
+.facts { margin: 12px 0 0; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
+.facts li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
+.facts li:first-child { border-top: 0; }
+.facts span:first-child { color: var(--muted); }
+.facts span:last-child { text-align: right; font-family: var(--mono); font-size: 12.5px; }
+.verdict { display: inline-block; margin-top: 12px; padding: 6px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; }
+.verdict.bad { background: var(--warn-bg); color: var(--warn); }
+.verdict.good { background: var(--ok-bg); color: var(--ok); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+.name { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+.hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+
+/* Extract panel */
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 18px 0 12px; }
+.search {
+  flex: 1 1 220px;
+  min-width: 0;
+  font: inherit;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+}
+.count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.fileline { color: var(--muted); font-size: 13px; margin: 12px 0 0; overflow-wrap: anywhere; }
+.group {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  min-width: 0;
+}
+.group[hidden] { display: none !important; }
+.group > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.group > summary::-webkit-details-marker { display: none; }
+.group > summary .n { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.kv { margin: 0; }
+.kv > div {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 4px 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+}
+.kv > div[hidden] { display: none !important; }
+.kv dt { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.kv dd { margin: 0; font-family: var(--mono); font-size: 12.5px; min-width: 0; overflow-wrap: anywhere; }
+.kv dd a { color: var(--accent); }
+.raw {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.empty { color: var(--muted); padding: 16px 0; }
+.btn.ghost { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pill { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); font-family: var(--sans); font-size: 11px; font-weight: 600; vertical-align: 1px; }
+.sens-box { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.sens-box p { margin: 4px 0 0; color: var(--fg); overflow-wrap: anywhere; }
+.sens-box .sens-hint { color: var(--muted); font-size: 13px; }
+.sens-box .btn { margin-top: 10px; }
+
+/* Add panel form */
+.form { margin-top: 18px; display: grid; gap: 14px; }
+.fields {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px 16px 16px;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+.fields legend { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 0 6px; }
+.fields label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.fields input {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.form .actions { margin-top: 0; }
+.fields input[type="checkbox"] { width: auto; }
+.fields input[type="range"] { padding: 0; accent-color: var(--accent); }
+.fields label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
+.fileline { color: var(--muted); font-size: 13px; margin: 14px 0 0; overflow-wrap: anywhere; }
+.footer { margin-top: 28px; color: var(--muted); font-size: 12.5px; }
+</style>
+
+<div class="wrap">
+  <h1>Métadonnées d'image</h1>
+  <p class="lede">Deux outils pour une même image : lire ce qu'elle cache, ou la nettoyer avant de la partager.</p>
+
+  <div class="tabs" role="tablist" aria-label="Choisir un outil">
+    <button class="tab" id="tab-extract" role="tab" aria-selected="true" aria-controls="panel-extract" type="button">Extraire</button>
+    <button class="tab" id="tab-strip" role="tab" aria-selected="false" aria-controls="panel-strip" tabindex="-1" type="button">Supprimer</button>
+    <button class="tab" id="tab-add" role="tab" aria-selected="false" aria-controls="panel-add" tabindex="-1" type="button">Ajouter</button>
+  </div>
+
+  <!-- EXTRACT -->
+  <section class="panel" id="panel-extract" role="tabpanel" aria-labelledby="tab-extract">
+    <h2 class="sec">Extraire les métadonnées</h2>
+    <p class="panel-lede">Affiche tout ce que contient l'image : appareil, date, réglages, position GPS, XMP, IPTC, commentaires. Le fichier n'est pas modifié.</p>
+
+    <div class="drop" id="dropExtract">
+      <p>Glissez une image ici, ou choisissez-la.</p>
+      <button class="btn" id="pickExtract" type="button">Choisir une image</button>
+      <input id="fileExtract" type="file" accept="image/jpeg,image/png,image/webp">
+    </div>
+
+    <div class="notice" id="errorExtract" hidden></div>
+
+    <section id="extractResult" hidden>
+      <p class="fileline" id="extractFile"></p>
+      <div class="toolbar">
+        <input id="metaQuery" class="search" type="search" placeholder="Filtrer : GPS, date, appareil…" aria-label="Filtrer les métadonnées">
+        <button class="btn ghost" id="copyMeta" type="button">Copier en texte</button>
+        <span class="count" id="metaCount"></span>
+      </div>
+      <div id="sensSummary"></div>
+    <div id="metaList"></div>
+    </section>
+  </section>
+
+  <!-- STRIP -->
+  <section class="panel" id="panel-strip" role="tabpanel" aria-labelledby="tab-strip" hidden>
+    <h2 class="sec">Supprimer les métadonnées</h2>
+    <p class="panel-lede">Crée une copie de l'image sans aucune métadonnée. L'original n'est pas modifié.</p>
+
+    <div class="drop" id="dropStrip">
+      <p>Glissez une image ici, ou choisissez-la.</p>
+      <button class="btn" id="pickStrip" type="button">Choisir une image</button>
+      <input id="fileStrip" type="file" accept="image/jpeg,image/png,image/webp">
+    </div>
+
+    <div class="notice" id="errorStrip" hidden></div>
+
+    <section class="result" id="stripResult" hidden>
+      <div class="grid" style="margin-top:18px">
+        <article class="card">
+          <h3>Original</h3>
+          <img class="thumb" id="origImg" alt="Image originale">
+          <ul class="facts" id="origFacts"></ul>
+          <div id="origVerdict"></div>
+        </article>
+        <article class="card">
+          <h3>Sans métadonnées</h3>
+          <img class="thumb" id="outImg" alt="Image sans métadonnées">
+          <ul class="facts" id="outFacts"></ul>
+          <div id="outVerdict"></div>
+        </article>
+      </div>
+      <div class="actions">
+        <a class="btn" id="download" href="#" download>Télécharger la copie propre</a>
+        <span class="name" id="outName"></span>
+      </div>
+      <p class="hint">Si le téléchargement est bloqué dans cet aperçu, faites un clic droit sur l'image de droite, puis « Enregistrer l'image sous ».</p>
+    </section>
+  </section>
+
+  <!-- ADD -->
+  <section class="panel" id="panel-add" role="tabpanel" aria-labelledby="tab-add" hidden>
+    <h2 class="sec">Ajouter des métadonnées</h2>
+    <p class="panel-lede">Écrit vos valeurs (date, heure, position, appareil, auteur) dans une copie de la photo. Les anciennes métadonnées sont retirées. L'original n'est pas modifié. JPEG ou PNG.</p>
+
+    <div class="drop" id="dropAdd">
+      <p>Glissez une photo JPEG ici, ou choisissez-la.</p>
+      <button class="btn" id="pickAdd" type="button">Choisir une image</button>
+      <input id="fileAdd" type="file" accept="image/jpeg,image/png">
+    </div>
+
+    <div class="notice" id="errorAdd" hidden></div>
+
+    <p class="fileline" id="addFile" hidden></p>
+    <form id="addForm" class="form" hidden>
+      <fieldset class="fields">
+        <legend>Date et heure de prise de vue</legend>
+        <label>Date <input id="fDate" type="date"></label>
+        <label>Heure <input id="fTime" type="time" step="1"></label>
+      </fieldset>
+      <fieldset class="fields">
+        <legend>Position GPS</legend>
+        <label>Latitude (ex. 5.35300) <input id="fLat" type="text" inputmode="decimal" placeholder="5.35300"></label>
+        <label>Longitude (ex. -3.99653) <input id="fLon" type="text" inputmode="decimal" placeholder="-3.99653"></label>
+        <label>Altitude (m) <input id="fAlt" type="text" inputmode="decimal"></label>
+      </fieldset>
+      <fieldset class="fields">
+        <legend>Appareil et auteur</legend>
+        <label>Fabricant <input id="fMake" type="text" maxlength="64"></label>
+        <label>Modèle <input id="fModel" type="text" maxlength="64"></label>
+        <label>Auteur <input id="fArtist" type="text" maxlength="64"></label>
+        <label>Copyright <input id="fCopy" type="text" maxlength="128"></label>
+      </fieldset>
+      <fieldset class="fields">
+        <legend>Description</legend>
+        <label>Description <input id="fDesc" type="text" maxlength="200"></label>
+      </fieldset>
+      <fieldset class="fields">
+        <legend>Bandeau horodaté (dessiné sur l’image)</legend>
+        <label class="check"><input id="fStamp" type="checkbox"> Afficher le bandeau date, position et adresse</label>
+        <label>Opacité du fond <input id="fOpacity" type="range" min="10" max="90" step="5" value="40"></label>
+        <label>Adresse <input id="fAddr" type="text" maxlength="120" placeholder="401 Rue Aoua Kéïta, Abidjan"></label>
+        <label>Texte libre <input id="fLabel" type="text" maxlength="80"></label>
+        <p class="hint" id="stampPreview" style="grid-column: 1 / -1"></p>
+      </fieldset>
+      <div class="actions">
+        <button class="btn" type="submit">Créer la copie avec ces métadonnées</button>
+      </div>
+    </form>
+
+    <section id="addResult" hidden>
+      <div class="grid" style="margin-top:18px">
+        <article class="card">
+          <h3>Nouvelle copie</h3>
+          <img class="thumb" id="addImg" alt="Photo avec les métadonnées ajoutées">
+        </article>
+        <article class="card">
+          <h3>Contrôle : ce qui est écrit dans le fichier</h3>
+          <ul class="facts" id="addFacts"></ul>
+        </article>
+      </div>
+      <div class="actions">
+        <a class="btn" id="addDownload" href="#" download>Télécharger la copie</a>
+        <span class="name" id="addName"></span>
+      </div>
+      <p class="hint">Si le téléchargement est bloqué dans cet aperçu, faites un clic droit sur l'image, puis « Enregistrer l'image sous ».</p>
+    </section>
+  </section>
+
+  <p class="footer">Traitement local : l'image est lue dans votre navigateur et n'est envoyée nulle part. Les formats HEIC ne sont pas pris en charge par le navigateur.</p>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+  const LABELS = {
+    'EXIF': 'EXIF : date, appareil, réglages, GPS',
+    'XMP': 'XMP : métadonnées d’éditeur',
+    'IPTC': 'IPTC / Photoshop : auteur, légendes',
+    'COM': 'Commentaire JPEG',
+    'APP': 'Segment d’application',
+    'PNG': 'Bloc texte ou EXIF PNG'
+  };
+
+  const TAGS_MAIN = {
+    0x0100: 'Largeur (px)', 0x0101: 'Hauteur (px)', 0x0102: 'Bits par canal', 0x0103: 'Compression',
+    0x010E: 'Description', 0x010F: 'Fabricant', 0x0110: 'Modèle', 0x0112: 'Orientation',
+    0x011A: 'Résolution X', 0x011B: 'Résolution Y', 0x0128: 'Unité de résolution',
+    0x0131: 'Logiciel', 0x0132: 'Date de modification', 0x013B: 'Auteur', 0x8298: 'Copyright',
+    0x0213: 'Positionnement YCbCr', 0x829A: 'Temps d’exposition', 0x829D: 'Ouverture (F)',
+    0x8822: 'Programme d’exposition', 0x8827: 'ISO', 0x9000: 'Version EXIF',
+    0x9003: 'Date de prise de vue', 0x9004: 'Date de numérisation', 0x9201: 'Vitesse (APEX)',
+    0x9202: 'Ouverture (APEX)', 0x9204: 'Correction d’exposition', 0x9207: 'Mode de mesure',
+    0x9209: 'Flash', 0x920A: 'Focale', 0x9286: 'Commentaire utilisateur', 0x927C: 'MakerNote',
+    0xA000: 'Version FlashPix', 0xA001: 'Espace colorimétrique', 0xA002: 'Largeur EXIF (px)',
+    0xA003: 'Hauteur EXIF (px)', 0xA402: 'Exposition', 0xA403: 'Balance des blancs',
+    0xA404: 'Zoom numérique', 0xA405: 'Focale équivalent 35 mm', 0xA420: 'ID unique image',
+    0xA430: 'Propriétaire', 0xA431: 'N° de série boîtier', 0xA432: 'Spécifications objectif',
+    0xA433: 'Fabricant objectif', 0xA434: 'Modèle objectif'
+  };
+  const TAGS_GPS = {
+    0x0000: 'Version GPS', 0x0001: 'Réf. latitude', 0x0002: 'Latitude (DMS)', 0x0003: 'Réf. longitude',
+    0x0004: 'Longitude (DMS)', 0x0005: 'Réf. altitude', 0x0006: 'Altitude', 0x0007: 'Heure GPS (UTC)',
+    0x0010: 'Réf. direction', 0x0011: 'Direction', 0x001B: 'Méthode de positionnement',
+    0x001C: 'Zone', 0x001D: 'Date GPS'
+  };
+  const IIM = {
+    5: 'Titre', 25: 'Mots-clés', 40: 'Instructions spéciales', 55: 'Date de création',
+    60: 'Heure de création', 80: 'Auteur (byline)', 85: 'Fonction de l’auteur', 90: 'Ville',
+    92: 'Région', 95: 'État', 101: 'Pays', 105: 'Titre (headline)', 110: 'Crédit',
+    115: 'Source', 116: 'Copyright', 120: 'Légende', 122: 'Rédacteur de la légende'
+  };
+  const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
+
+  /* ---------- Helpers ---------- */
+
+  let urls = [];
+  function freeUrls() { urls.forEach((u) => URL.revokeObjectURL(u)); urls = []; }
+  function track(blob) { const u = URL.createObjectURL(blob); urls.push(u); return u; }
+
+  function latin(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return s;
+  }
+  function utf8(bytes) {
+    try { return new TextDecoder('utf-8').decode(bytes); } catch (e) { return latin(bytes); }
+  }
+  function u32be(b, i) { return ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0; }
+  function u32le(b, i) { return ((b[i]) | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0; }
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function hex4(n) { return '0x' + n.toString(16).toUpperCase().padStart(4, '0'); }
+  function fmt(x) {
+    if (!isFinite(x)) return '—';
+    if (Number.isInteger(x)) return String(x);
+    return x.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  }
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' o';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1).replace('.', ',') + ' Ko';
+    return (n / 1024 / 1024).toFixed(2).replace('.', ',') + ' Mo';
+  }
+  function el(tag, props, kids) {
+    const n = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach((k) => {
+        if (k === 'class') n.className = props[k];
+        else if (k === 'text') n.textContent = props[k];
+        else n.setAttribute(k, props[k]);
+      });
+    }
+    (kids || []).forEach((c) => n.append(c));
+    return n;
+  }
+
+  /* ---------- EXIF / TIFF ---------- */
+
+  function userComment(bytes) {
+    const code = latin(bytes.subarray(0, 8));
+    const body = bytes.subarray(8);
+    try {
+      const enc = code.startsWith('UNICODE') ? 'utf-16le' : 'utf-8';
+      return new TextDecoder(enc).decode(body).replace(/\u0000+$/, '').trim() || '(vide)';
+    } catch (e) {
+      return latin(body).replace(/\u0000+$/, '').trim();
+    }
+  }
+
+  function formatEntry(tag, e) {
+    const v = e.value;
+    if (v == null) return '—';
+    if (typeof v === 'string') return v || '(vide)';
+    if (v.bytes) {
+      const b = v.bytes;
+      if (tag === 0x9286) return userComment(b);
+      if (tag === 0x0005) return b[0] ? 'Sous le niveau de la mer' : 'Au-dessus du niveau de la mer';
+      if (tag === 0x927C) return b.length + ' octets (MakerNote, non décodé)';
+      if (tag === 0x9000 || tag === 0xA000) return latin(b);
+      if (tag === 0x0000) return Array.from(b).join('.');
+      const hex = Array.from(b.subarray(0, 24), (x) => x.toString(16).padStart(2, '0')).join(' ');
+      return hex + (b.length > 24 ? ' …' : '');
+    }
+    if (!Array.isArray(v)) return String(v);
+    if (Array.isArray(v[0])) {
+      const r = v.map(([n, d]) => (d ? n / d : 0));
+      if (tag === 0x829A) return r[0] > 0 && r[0] < 1 ? '1/' + Math.round(1 / r[0]) + ' s' : fmt(r[0]) + ' s';
+      if (tag === 0x829D) return 'f/' + fmt(r[0]);
+      if (tag === 0x920A || tag === 0xA405) return fmt(r[0]) + ' mm';
+      if (tag === 0x0006) return fmt(r[0]) + ' m';
+      if (tag === 0x0002 || tag === 0x0004) return r.length >= 3 ? `${fmt(r[0])}° ${fmt(r[1])}′ ${fmt(r[2])}″` : r.map(fmt).join(', ');
+      if (tag === 0x0007) return r.length >= 3 ? `${pad2(Math.floor(r[0]))}:${pad2(Math.floor(r[1]))}:${pad2(Math.floor(r[2]))}` : r.map(fmt).join(', ');
+      return r.map(fmt).join(', ');
+    }
+    return v.map(String).join(', ');
+  }
+
+  function readTiff(t) {
+    const rows = [];
+    if (!t || t.length < 8) return rows;
+    const hdr = String.fromCharCode(t[0], t[1]);
+    const le = hdr === 'II';
+    if (!le && hdr !== 'MM') return rows;
+    const dv = new DataView(t.buffer, t.byteOffset, t.byteLength);
+    const u16 = (o) => dv.getUint16(o, le);
+    const u32 = (o) => dv.getUint32(o, le);
+
+    const decode = (type, n, raw) => {
+      const rv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+      const arr = (size, fn) => Array.from({ length: n }, (_, i) => fn(i * size));
+      switch (type) {
+        case 1: case 7: return { bytes: raw };
+        case 2: return utf8(raw).replace(/\u0000+$/, '').trim();
+        case 3: return arr(2, (o) => rv.getUint16(o, le));
+        case 4: return arr(4, (o) => rv.getUint32(o, le));
+        case 5: return arr(8, (o) => [rv.getUint32(o, le), rv.getUint32(o + 4, le)]);
+        case 6: return arr(1, (o) => rv.getInt8(o));
+        case 8: return arr(2, (o) => rv.getInt16(o, le));
+        case 9: return arr(4, (o) => rv.getInt32(o, le));
+        case 10: return arr(8, (o) => [rv.getInt32(o, le), rv.getInt32(o + 4, le)]);
+        case 11: return arr(4, (o) => rv.getFloat32(o, le));
+        case 12: return arr(8, (o) => rv.getFloat64(o, le));
+      }
+      return null;
+    };
+
+    const readIfd = (off) => {
+      const entries = [];
+      if (!off || off + 2 > t.length) return { entries, next: 0 };
+      const n = u16(off);
+      for (let k = 0; k < n; k++) {
+        const e = off + 2 + k * 12;
+        if (e + 12 > t.length) break;
+        const tag = u16(e), type = u16(e + 2), count = u32(e + 4);
+        if (!TYPE_SIZE[type]) continue;
+        const size = TYPE_SIZE[type] * count;
+        const at = size <= 4 ? e + 8 : u32(e + 8);
+        if (at + size > t.length) continue;
+        const raw = t.subarray(at, at + size);
+        entries.push({ tag, type, count, value: decode(type, count, raw) });
+      }
+      const after = off + 2 + n * 12;
+      const next = after + 4 <= t.length ? u32(after) : 0;
+      return { entries, next };
+    };
+
+    const pointer = (entries, tag) => {
+      const e = entries.find((x) => x.tag === tag);
+      return e && Array.isArray(e.value) ? e.value[0] : 0;
+    };
+
+    const push = (group, e, names) => {
+      if (e.tag === 0x8769 || e.tag === 0x8825) return;
+      rows.push({ group, name: names[e.tag] || ('Tag ' + hex4(e.tag)), value: formatEntry(e.tag, e) });
+    };
+
+    const ifd0 = readIfd(u32(4));
+    ifd0.entries.forEach((e) => push('Image', e, TAGS_MAIN));
+
+    const exifOff = pointer(ifd0.entries, 0x8769);
+    const gpsOff = pointer(ifd0.entries, 0x8825);
+    if (exifOff) readIfd(exifOff).entries.forEach((e) => push('Prise de vue', e, TAGS_MAIN));
+    if (gpsOff) {
+      const gps = readIfd(gpsOff).entries;
+      gps.forEach((e) => push('GPS', e, TAGS_GPS));
+      addCoordinates(gps, rows);
+    }
+    if (ifd0.next) readIfd(ifd0.next).entries.forEach((e) => push('Miniature', e, TAGS_MAIN));
+    return rows;
+  }
+
+  function addCoordinates(gps, rows) {
+    const by = {};
+    gps.forEach((e) => { by[e.tag] = e; });
+    const toDeg = (e) => {
+      if (!e || !Array.isArray(e.value) || e.value.length < 3 || !Array.isArray(e.value[0])) return null;
+      return e.value.slice(0, 3).reduce((acc, [n, d], i) => acc + (d ? n / d : 0) / [1, 60, 3600][i], 0);
+    };
+    const lat0 = toDeg(by[2]), lon0 = toDeg(by[4]);
+    if (lat0 == null || lon0 == null) return;
+    const lat = by[1] && by[1].value === 'S' ? -lat0 : lat0;
+    const lon = by[3] && by[3].value === 'W' ? -lon0 : lon0;
+    rows.push({ group: 'GPS', name: 'Coordonnées (décimales)', value: lat.toFixed(6) + ', ' + lon.toFixed(6) });
+    rows.push({
+      group: 'GPS', name: 'Carte', value: 'OpenStreetMap',
+      href: 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lon + '#map=16/' + lat + '/' + lon
+    });
+  }
+
+  /* ---------- IPTC (Photoshop APP13) ---------- */
+
+  function parseIim(d) {
+    const rows = [];
+    let p = 0;
+    while (p + 5 <= d.length) {
+      if (d[p] !== 0x1C) { p++; continue; }
+      const rec = d[p + 1], ds = d[p + 2], len = (d[p + 3] << 8) | d[p + 4];
+      const val = d.subarray(p + 5, p + 5 + len);
+      if (rec === 2 && IIM[ds]) rows.push({ group: 'IPTC', name: IIM[ds], value: utf8(val).trim() || '(vide)' });
+      p += 5 + len;
+    }
+    return rows;
+  }
+
+  function parsePhotoshop(d) {
+    const rows = [];
+    let p = 0;
+    while (p + 12 <= d.length && latin(d.subarray(p, p + 4)) === '8BIM') {
+      const id = (d[p + 4] << 8) | d[p + 5];
+      let q = p + 6;
+      const nameLen = d[q];
+      q += 1 + nameLen;
+      if ((1 + nameLen) % 2) q += 1;
+      const size = u32be(d, q);
+      q += 4;
+      if (id === 0x0404) rows.push(...parseIim(d.subarray(q, q + size)));
+      p = q + size + (size & 1);
+    }
+    return rows;
+  }
+
+  /* ---------- XMP ---------- */
+
+  function readXmp(d, rows, blocks) {
+    const text = utf8(d);
+    blocks.push({ title: 'XMP brut (' + text.length + ' caractères)', text: text });
+    const re = /([A-Za-z][\w.-]*:[A-Za-z][\w.-]*)(?:="([^"]*)"|>([^<]+)<)/g;
+    const seen = new Set();
+    let m;
+    while ((m = re.exec(text)) && seen.size < 200) {
+      const k = m[1];
+      const v = (m[2] || m[3] || '').trim();
+      if (!v || seen.has(k) || /^(xmlns|rdf|x):/.test(k)) continue;
+      seen.add(k);
+      rows.push({ group: 'XMP', name: k, value: v.slice(0, 300) });
+    }
+  }
+
+  /* ---------- PNG / WebP ---------- */
+
+  function parsePng(b, rows) {
+    let i = 8;
+    while (i + 8 <= b.length) {
+      const len = u32be(b, i);
+      const type = latin(b.subarray(i + 4, i + 8));
+      const data = b.subarray(i + 8, i + 8 + len);
+      if (type === 'IEND') break;
+      try {
+        if (type === 'tEXt') {
+          const z = data.indexOf(0);
+          rows.push({ group: 'Texte PNG', name: latin(data.subarray(0, z)), value: latin(data.subarray(z + 1)) });
+        } else if (type === 'zTXt') {
+          const z = data.indexOf(0);
+          rows.push({ group: 'Texte PNG', name: latin(data.subarray(0, z)), value: '(compressé, non décodé)' });
+        } else if (type === 'iTXt') {
+          const z = data.indexOf(0);
+          const key = latin(data.subarray(0, z));
+          const compressed = data[z + 1];
+          let p = data.indexOf(0, z + 3) + 1;
+          p = data.indexOf(0, p) + 1;
+          rows.push({ group: 'Texte PNG', name: key, value: compressed ? '(compressé, non décodé)' : utf8(data.subarray(p)) });
+        } else if (type === 'eXIf') {
+          rows.push(...readTiff(data));
+        } else if (type === 'tIME') {
+          const y = (data[0] << 8) | data[1];
+          rows.push({ group: 'Divers', name: 'Dernière modification (tIME)',
+            value: `${y}-${pad2(data[2])}-${pad2(data[3])} ${pad2(data[4])}:${pad2(data[5])}:${pad2(data[6])} UTC` });
+        } else {
+          rows.push({ group: 'Divers', name: 'Bloc PNG ' + type, value: len + ' octets' });
+        }
+      } catch (e) { /* malformed chunk: skip */ }
+      i += 12 + len;
+    }
+  }
+
+  function parseWebp(b, rows, blocks) {
+    let i = 12;
+    while (i + 8 <= b.length) {
+      const type = latin(b.subarray(i, i + 4));
+      const size = u32le(b, i + 4);
+      const data = b.subarray(i + 8, i + 8 + size);
+      if (type === 'EXIF') {
+        const t = latin(data.subarray(0, 6)) === 'Exif\u0000\u0000' ? data.subarray(6) : data;
+        rows.push(...readTiff(t));
+      } else if (type === 'XMP ') {
+        readXmp(data, rows, blocks);
+      } else if (type === 'ICCP') {
+        rows.push({ group: 'Divers', name: 'Profil ICC', value: size + ' octets' });
+      }
+      i += 8 + size + (size & 1);
+    }
+  }
+
+  function readMetadata(b, type) {
+    const rows = [];
+    const blocks = [];
+    try {
+      if (type === 'image/jpeg') {
+        let i = 2;
+        while (i + 4 <= b.length && b[i] === 0xFF) {
+          const m = b[i + 1];
+          if (m === 0xDA || m === 0xD9) break;
+          if (m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+          const len = (b[i + 2] << 8) | b[i + 3];
+          const data = b.subarray(i + 4, i + 2 + len);
+          const head = latin(data.subarray(0, 40));
+          if (m === 0xE1 && head.startsWith('Exif\u0000\u0000')) {
+            rows.push(...readTiff(data.subarray(6)));
+          } else if (m === 0xE1 && head.startsWith('http://ns.adobe.com/xap/1.0/')) {
+            readXmp(data.subarray(data.indexOf(0) + 1), rows, blocks);
+          } else if (m === 0xED && head.startsWith('Photoshop 3.0')) {
+            rows.push(...parsePhotoshop(data.subarray(14)));
+          } else if (m === 0xFE) {
+            rows.push({ group: 'Divers', name: 'Commentaire (COM)', value: utf8(data) });
+          } else if (m >= 0xE0 && m <= 0xEF) {
+            rows.push({ group: 'Divers', name: 'Segment APP' + (m - 0xE0), value: (len - 2) + ' octets' });
+          }
+          i += 2 + len;
+        }
+      } else if (type === 'image/png') {
+        parsePng(b, rows);
+      } else if (type === 'image/webp') {
+        parseWebp(b, rows, blocks);
+      }
+    } catch (e) { /* keep whatever was read before the error */ }
+    return { rows, blocks };
+  }
+
+  /* ---------- Extract panel ---------- */
+
+  function renderMetadata(result) {
+    const list = $('metaList');
+    list.textContent = '';
+    const { rows, blocks } = result;
+    lastRows = rows;
+    $('metaQuery').value = '';
+    $('sensSummary').textContent = '';
+
+    if (!rows.length && !blocks.length) {
+      list.append(el('p', { class: 'empty', text: 'Aucune métadonnée lisible dans ce fichier.' }));
+      $('metaCount').textContent = '0 entrée';
+      return;
+    }
+
+    renderSummary(rows.filter(isSensitive));
+    const order = [];
+    const byGroup = {};
+    rows.forEach((r) => {
+      if (!byGroup[r.group]) { byGroup[r.group] = []; order.push(r.group); }
+      byGroup[r.group].push(r);
+    });
+
+    order.forEach((g) => {
+      const items = byGroup[g].map((r) => {
+        const dd = el('dd');
+        if (r.href) dd.append(el('a', { href: r.href, target: '_blank', rel: 'noopener noreferrer', text: r.value }));
+        else dd.textContent = r.value;
+        return el('div', { 'data-s': (r.group + ' ' + r.name + ' ' + r.value).toLowerCase() },
+          [el('dt', null, [document.createTextNode(r.name), ...(isSensitive(r) ? [el('span', { class: 'pill', text: 'Sensible' })] : [])]), dd]);
+      });
+      const count = el('span', { class: 'n', text: String(items.length) });
+      const dl = el('dl', { class: 'kv' }, items);
+      const det = el('details', { class: 'group', 'data-group': '' },
+        [el('summary', null, [el('span', { text: g }), count]), dl]);
+      det.open = true;
+      list.append(det);
+    });
+
+    blocks.forEach((b) => {
+      list.append(el('details', { class: 'group' }, [
+        el('summary', null, [el('span', { text: b.title })]),
+        el('pre', { class: 'raw', text: b.text.length > 20000 ? b.text.slice(0, 20000) + '\n…' : b.text })
+      ]));
+    });
+
+    $('metaCount').textContent = rows.length + (rows.length > 1 ? ' entrées' : ' entrée');
+  }
+
+  let lastRows = [];
+  const SENSITIVE_NAMES = /^(Propriétaire|N° de série boîtier|ID unique image|Auteur|Auteur \(byline\)|Copyright|Commentaire|Commentaire utilisateur|Commentaire \(COM\)|Ville|Pays|Région|Fabricant|Modèle|Logiciel|Date de prise de vue|Date de numérisation|Modèle objectif|Fabricant objectif)$/;
+  const SENSITIVE_XMP = /(Make|Model|Creator|rights|Serial|Software|City|Country|Location|Copyright|GPS)/i;
+
+  // Identity, device and location data: what you usually do not want to publish.
+  function isSensitive(r) {
+    if (r.group === 'GPS') return true;
+    if (SENSITIVE_NAMES.test(r.name)) return true;
+    return (r.group === 'XMP' || r.group === 'IPTC') && SENSITIVE_XMP.test(r.name);
+  }
+
+  function renderSummary(sens) {
+    const box = $('sensSummary');
+    box.textContent = '';
+    if (!sens.length) return;
+    const names = [...new Set(sens.map((r) => (r.group === 'GPS' ? 'position GPS' : r.name)))];
+    const title = sens.length > 1 ? sens.length + ' éléments sensibles détectés' : '1 élément sensible détecté';
+    const go = el('button', { class: 'btn', type: 'button', text: 'Supprimer ces métadonnées' });
+    go.addEventListener('click', () => selectTab('strip'));
+    box.append(el('div', { class: 'sens-box' }, [
+      el('strong', { text: title }),
+      el('p', { text: names.slice(0, 12).join(', ') + (names.length > 12 ? '…' : '') }),
+      el('p', { class: 'sens-hint', text: 'Ces données peuvent révéler où et quand la photo a été prise, ou qui l’a prise.' }),
+      go
+    ]));
+  }
+
+  async function copyMetadata() {
+    const btn = $('copyMeta');
+    const text = lastRows.map((r) => r.group + ' — ' + r.name + ' : ' + r.value).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'Copié';
+    } catch (e) {
+      btn.textContent = 'Copie refusée ici';
+    }
+    setTimeout(() => { btn.textContent = 'Copier en texte'; }, 1600);
+  }
+
+  function filterMetadata() {
+    const q = $('metaQuery').value.trim().toLowerCase();
+    const rowEls = document.querySelectorAll('#metaList .kv > div');
+    let shown = 0;
+    rowEls.forEach((r) => {
+      const match = !q || r.getAttribute('data-s').includes(q);
+      r.hidden = !match;
+      if (match) shown++;
+    });
+    document.querySelectorAll('#metaList details[data-group]').forEach((g) => {
+      g.hidden = g.querySelectorAll('.kv > div:not([hidden])').length === 0;
+    });
+    $('metaCount').textContent = q ? shown + ' sur ' + rowEls.length : rowEls.length + ' entrées';
+  }
+
+  async function handleExtract(file) {
+    hideError('Extract');
+    if (!TYPES.includes(file.type)) return showError('Extract', 'Format non pris en charge. Utilisez un fichier JPEG, PNG ou WebP.');
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      $('extractFile').textContent = file.name + ' · ' + fmtBytes(file.size);
+      renderMetadata(readMetadata(buf, file.type));
+      $('extractResult').hidden = false;
+      if ($('extractResult').scrollIntoView) $('extractResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showError('Extract', 'Impossible de lire cette image : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
+    }
+  }
+
+  /* ---------- Strip panel ---------- */
+
+  function scanBlocks(b, type) {
+    const found = [];
+    try {
+      if (type === 'image/jpeg') {
+        let i = 2;
+        while (i + 4 <= b.length && b[i] === 0xFF) {
+          const m = b[i + 1];
+          if (m === 0xDA || m === 0xD9) break;
+          if (m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+          const len = (b[i + 2] << 8) | b[i + 3];
+          const head = latin(b.subarray(i + 4, Math.min(i + 34, i + 2 + len)));
+          if (m >= 0xE1 && m <= 0xEF && m !== 0xE0) {
+            let key = 'APP';
+            if (head.startsWith('Exif')) key = 'EXIF';
+            else if (head.startsWith('http://ns.adobe.com/xap')) key = 'XMP';
+            else if (head.startsWith('Photoshop')) key = 'IPTC';
+            found.push({ key, bytes: len + 2, detail: key });
+          } else if (m === 0xFE) {
+            found.push({ key: 'COM', bytes: len + 2, detail: 'COM' });
+          }
+          i += 2 + len;
+        }
+      } else if (type === 'image/png') {
+        let i = 8;
+        while (i + 8 <= b.length) {
+          const len = u32be(b, i);
+          const t = latin(b.subarray(i + 4, i + 8));
+          if (['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME'].includes(t)) found.push({ key: 'PNG', bytes: len + 12, detail: t });
+          if (t === 'IEND') break;
+          i += 12 + len;
+        }
+      } else if (type === 'image/webp') {
+        let i = 12;
+        while (i + 8 <= b.length) {
+          const t = latin(b.subarray(i, i + 4));
+          const size = u32le(b, i + 4);
+          if (t === 'EXIF') found.push({ key: 'EXIF', bytes: size + 8, detail: 'EXIF' });
+          if (t === 'XMP ') found.push({ key: 'XMP', bytes: size + 8, detail: 'XMP' });
+          i += 8 + size + (size & 1);
+        }
+      }
+    } catch (e) { /* malformed: report what was found */ }
+    return found;
+  }
+
+  function factRow(list, label, value) {
+    const li = document.createElement('li');
+    const a = document.createElement('span'); a.textContent = label;
+    const v = document.createElement('span'); v.textContent = value;
+    li.append(a, v);
+    list.appendChild(li);
+  }
+
+  function renderFound(listEl, verdictEl, found) {
+    listEl.textContent = '';
+    verdictEl.textContent = '';
+    const verdict = document.createElement('span');
+    verdict.className = 'verdict';
+    if (found.length === 0) {
+      verdict.classList.add('good');
+      verdict.textContent = 'Aucune métadonnée détectée';
+      verdictEl.appendChild(verdict);
+      factRow(listEl, 'Blocs trouvés', '0');
+      return;
+    }
+    verdict.classList.add('bad');
+    verdict.textContent = found.length + (found.length > 1 ? ' blocs de métadonnées' : ' bloc de métadonnées');
+    verdictEl.appendChild(verdict);
+    const seen = {};
+    found.forEach((f) => { seen[f.detail] = (seen[f.detail] || 0) + f.bytes; });
+    Object.keys(seen).forEach((k) => {
+      const key = found.find((f) => f.detail === k).key;
+      factRow(listEl, LABELS[k] || LABELS[key] || k, fmtBytes(seen[k]));
+    });
+  }
+
+  async function handleStrip(file) {
+    hideError('Strip');
+    if (!TYPES.includes(file.type)) return showError('Strip', 'Format non pris en charge. Utilisez un fichier JPEG, PNG ou WebP.');
+    try {
+      freeUrls();
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const found = scanBlocks(buf, file.type);
+      const srcUrl = track(file);
+
+      const img = new Image();
+      img.src = srcUrl;
+      await img.decode();
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+
+      // Redrawing on a canvas keeps only the pixels: EXIF, XMP, IPTC and comments are dropped.
+      // Browsers apply EXIF orientation while drawing, so the picture stays upright.
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      const blob = await new Promise((res) => canvas.toBlob(res, file.type, 0.92));
+      if (!blob) throw new Error('réencodage impossible dans ce navigateur');
+
+      const outUrl = track(blob);
+      const outFound = scanBlocks(new Uint8Array(await blob.arrayBuffer()), file.type);
+
+      const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
+      const base = file.name.replace(/\.[^.]+$/, '');
+      const outName = base + '_sans_metadonnees' + ext;
+
+      $('origImg').src = srcUrl;
+      $('outImg').src = outUrl;
+      $('outImg').alt = outName;
+      renderFound($('origFacts'), $('origVerdict'), found);
+      renderFound($('outFacts'), $('outVerdict'), outFound);
+      factRow($('origFacts'), 'Dimensions', w + ' × ' + h + ' px');
+      factRow($('origFacts'), 'Taille', fmtBytes(file.size));
+      factRow($('outFacts'), 'Dimensions', w + ' × ' + h + ' px');
+      factRow($('outFacts'), 'Taille', fmtBytes(blob.size));
+
+      const dl = $('download');
+      dl.href = outUrl;
+      dl.download = outName;
+      $('outName').textContent = outName;
+      $('stripResult').hidden = false;
+    } catch (err) {
+      showError('Strip', 'Impossible de traiter cette image : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
+    }
+  }
+
+  /* ---------- Shared UI ---------- */
+
+  function showError(panel, msg) {
+    const n = $('error' + panel);
+    n.textContent = msg;
+    n.hidden = false;
+  }
+  function hideError(panel) { $('error' + panel).hidden = true; }
+
+  function selectTab(name) {
+    ['extract', 'strip', 'add'].forEach((n) => {
+      const on = n === name;
+      $('tab-' + n).setAttribute('aria-selected', String(on));
+      $('tab-' + n).tabIndex = on ? 0 : -1;
+      $('panel-' + n).hidden = !on;
+    });
+  }
+
+  /* ---------- Add panel: write chosen values into a clean JPEG copy ---------- */
+
+  let addSource = null;   // {file} of the photo loaded in the add panel
+
+  const u32b = (v) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, v, true); return b; };
+  const rats = (pairs) => {
+    const b = new Uint8Array(pairs.length * 8);
+    const dv = new DataView(b.buffer);
+    pairs.forEach(([n, d], i) => { dv.setUint32(i * 8, n, true); dv.setUint32(i * 8 + 4, d, true); });
+    return b;
+  };
+  const asciiEntry = (s) => {
+    // Accents are removed: many EXIF readers still decode text as Latin-1, which would garble them.
+    const b = new TextEncoder().encode(s.normalize('NFD').replace(/[̀-ͯ]/g, ''));
+    const o = new Uint8Array(b.length + 1);
+    o.set(b);
+    return { type: 2, count: o.length, bytes: o };
+  };
+  const dmsEntry = (x) => {
+    const a = Math.abs(x);
+    const d = Math.floor(a);
+    const mf = (a - d) * 60;
+    const m = Math.floor(mf);
+    const s = Math.round((mf - m) * 60 * 10000);
+    return { type: 5, count: 3, bytes: rats([[d, 1], [m, 1], [s, 10000]]) };
+  };
+
+  // Writes a little-endian TIFF block: IFD0 (+ Exif and GPS sub-directories).
+  function buildTiff(ifd0Tags, exifTags, gpsTags) {
+    const hasGps = gpsTags.length > 0;
+    const size = (n) => 2 + 12 * n + 4;
+    const off0 = 8;
+    const n0 = ifd0Tags.length + 1 + (hasGps ? 1 : 0);
+    const offExif = off0 + size(n0);
+    const offGps = offExif + size(exifTags.length);
+    let cursor = offGps + (hasGps ? size(gpsTags.length) : 0);
+
+    const dataAt = new Map();
+    [...ifd0Tags, ...exifTags, ...gpsTags].forEach((e) => {
+      if (e.bytes.length > 4) {
+        dataAt.set(e, cursor);
+        cursor += e.bytes.length + (e.bytes.length & 1);
+      }
+    });
+
+    const ifd0 = [...ifd0Tags, { tag: 0x8769, type: 4, count: 1, bytes: u32b(offExif) }];
+    if (hasGps) ifd0.push({ tag: 0x8825, type: 4, count: 1, bytes: u32b(offGps) });
+    ifd0.sort((a, b) => a.tag - b.tag);
+
+    const out = new Uint8Array(cursor);
+    const dv = new DataView(out.buffer);
+    out.set([0x49, 0x49, 0x2a, 0x00], 0);
+    dv.setUint32(4, off0, true);
+
+    const write = (list, off) => {
+      dv.setUint16(off, list.length, true);
+      list.forEach((e, i) => {
+        const p = off + 2 + i * 12;
+        dv.setUint16(p, e.tag, true);
+        dv.setUint16(p + 2, e.type, true);
+        dv.setUint32(p + 4, e.count, true);
+        if (e.bytes.length > 4) {
+          const at = dataAt.get(e);
+          dv.setUint32(p + 8, at, true);
+          out.set(e.bytes, at);
+        } else {
+          out.set(e.bytes, p + 8);
+        }
+      });
+    };
+    write(ifd0, off0);
+    write(exifTags, offExif);
+    if (hasGps) write(gpsTags, offGps);
+    return out;
+  }
+
+  function exifFromForm(f) {
+    const ifd0 = [];
+    const add = (tag, s) => { if (s) ifd0.push({ tag, ...asciiEntry(s) }); };
+    add(0x010F, f.make);
+    add(0x0110, f.model);
+    add(0x010E, f.desc);
+    add(0x013B, f.artist);
+    add(0x8298, f.copy);
+    add(0x0132, f.dt);
+    ifd0.sort((a, b) => a.tag - b.tag);
+
+    const exif = [{ tag: 0x9000, type: 7, count: 4, bytes: new TextEncoder().encode('0230') }];
+    if (f.dt) {
+      exif.push({ tag: 0x9003, ...asciiEntry(f.dt) });
+      exif.push({ tag: 0x9004, ...asciiEntry(f.dt) });
+    }
+
+    const gps = [];
+    if (f.lat !== undefined) {
+      gps.push({ tag: 0x0000, type: 1, count: 4, bytes: new Uint8Array([2, 3, 0, 0]) });
+      gps.push({ tag: 0x0001, ...asciiEntry(f.lat < 0 ? 'S' : 'N') });
+      gps.push({ tag: 0x0002, ...dmsEntry(f.lat) });
+      gps.push({ tag: 0x0003, ...asciiEntry(f.lon < 0 ? 'W' : 'E') });
+      gps.push({ tag: 0x0004, ...dmsEntry(f.lon) });
+      if (f.alt !== undefined) {
+        gps.push({ tag: 0x0005, type: 1, count: 1, bytes: new Uint8Array([f.alt < 0 ? 1 : 0]) });
+        gps.push({ tag: 0x0006, type: 5, count: 1, bytes: rats([[Math.round(Math.abs(f.alt) * 100), 100]]) });
+      }
+      if (f.time) {
+        const [h, m, s] = f.time.split(':').map(Number);
+        gps.push({ tag: 0x0007, type: 5, count: 3, bytes: rats([[h, 1], [m, 1], [s, 1]]) });
+      }
+      if (f.dt) gps.push({ tag: 0x001D, ...asciiEntry(f.dt.slice(0, 10)) });
+    }
+    return { ifd0, exif, gps };
+  }
+
+  // Inserts an APP1 (Exif) segment after SOI and the JFIF segment, if present.
+  function injectExif(jpeg, tiff) {
+    const len = 2 + 6 + tiff.length;
+    const seg = new Uint8Array(2 + len);
+    seg.set([0xFF, 0xE1, len >> 8, len & 0xFF, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00], 0);
+    seg.set(tiff, 10);
+    let pos = 2;
+    if (jpeg[2] === 0xFF && jpeg[3] === 0xE0) pos = 4 + ((jpeg[4] << 8) | jpeg[5]);
+    const out = new Uint8Array(jpeg.length + seg.length);
+    out.set(jpeg.subarray(0, pos), 0);
+    out.set(seg, pos);
+    out.set(jpeg.subarray(pos), pos + seg.length);
+    return out;
+  }
+
+  // Draws a dark band at the bottom left, like the timestamp overlays on field photos.
+  // One line per filled item: date/time, coordinates, address, free text.
+  function stampLinesFrom(f) {
+    const lines = [];
+    if (f.dt) {
+      const [d, t] = f.dt.split(' ');
+      const [y, mo, da] = d.split(':');
+      lines.push(da + '.' + mo + '.' + y + ' ' + (t || '00:00:00').slice(0, 5));
+    }
+    if (f.lat !== undefined && f.lon !== undefined) lines.push(f.lat.toFixed(5) + ', ' + f.lon.toFixed(5));
+    if (f.addr) lines.push(f.addr);
+    if (f.label) lines.push(f.label);
+    return lines;
+  }
+
+  // Live text preview under the stamp checkbox, so the user sees what the band will contain.
+  function updateStampPreview() {
+    const v = (id) => $(id).value.trim();
+    const num = (s) => Number(s.replace(',', '.'));
+    const date = v('fDate');
+    let time = v('fTime');
+    if (time && time.length === 5) time += ':00';
+    const f = { dt: date ? date.replace(/-/g, ':') + ' ' + (time || '00:00:00') : '', addr: v('fAddr'), label: v('fLabel') };
+    const lat = v('fLat') ? num(v('fLat')) : NaN;
+    const lon = v('fLon') ? num(v('fLon')) : NaN;
+    if (isFinite(lat) && isFinite(lon)) { f.lat = lat; f.lon = lon; }
+    const lines = stampLinesFrom(f);
+    $('stampPreview').textContent = lines.length
+      ? 'Texte du bandeau : ' + lines.join('  ·  ')
+      : 'Renseignez la date, la position ou l’adresse pour voir le texte du bandeau.';
+  }
+
+  function drawStamp(ctx, w, h, f) {
+    const lines = stampLinesFrom(f);
+    if (!lines.length) return;
+
+    const size = Math.max(11, Math.round(h * 0.02));
+    const pad = Math.round(size * 0.6);
+    const lineH = Math.round(size * 1.35);
+    // Monospaced digits, like the timestamp overlays on field photos.
+    ctx.font = '600 ' + size + 'px "Roboto Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
+    ctx.textBaseline = 'top';
+    const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+    const boxW = Math.min(w - 2 * pad, widest + pad * 2);
+    const boxH = lines.length * lineH + pad;
+    const x = pad;
+    const y = h - boxH - pad;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, ' + (f.opacity !== undefined ? f.opacity : 0.4) + ')';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.fillStyle = '#ffffff';
+    lines.forEach((l, i) => ctx.fillText(l, x + pad, y + pad / 2 + i * lineH, boxW - pad * 2));
+  }
+
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // PNG: the Exif block goes into an eXIf chunk, placed right after IHDR.
+  function injectExifPng(png, tiff) {
+    const ihdrLen = ((png[8] << 24) | (png[9] << 16) | (png[10] << 8) | png[11]) >>> 0;
+    const pos = 8 + 12 + ihdrLen;
+    const chunk = new Uint8Array(12 + tiff.length);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, tiff.length);
+    chunk.set([0x65, 0x58, 0x49, 0x66], 4);                 // 'eXIf'
+    chunk.set(tiff, 8);
+    dv.setUint32(8 + tiff.length, crc32(chunk.subarray(4, 8 + tiff.length)));
+    const out = new Uint8Array(png.length + chunk.length);
+    out.set(png.subarray(0, pos), 0);
+    out.set(chunk, pos);
+    out.set(png.subarray(pos), pos + chunk.length);
+    return out;
+  }
+
+  function readAddForm() {
+    const v = (id) => $(id).value.trim();
+    const num = (s) => Number(s.replace(',', '.'));
+    const date = v('fDate');
+    let time = v('fTime');
+    if (time && time.length === 5) time += ':00';
+    if (time && !date) return { error: 'Indiquez aussi la date pour l’heure.' };
+    const f = {
+      make: v('fMake'), model: v('fModel'), artist: v('fArtist'), copy: v('fCopy'), desc: v('fDesc'),
+      addr: v('fAddr'), label: v('fLabel'), stamp: $('fStamp').checked,
+      opacity: Number($('fOpacity').value) / 100,
+      dt: date ? date.replace(/-/g, ':') + ' ' + (time || '00:00:00') : '',
+      time
+    };
+    const lat = v('fLat'), lon = v('fLon'), alt = v('fAlt');
+    if (lat || lon) {
+      if (!lat || !lon) return { error: 'La latitude et la longitude vont ensemble.' };
+      f.lat = num(lat);
+      f.lon = num(lon);
+      if (!isFinite(f.lat) || !isFinite(f.lon) || Math.abs(f.lat) > 90 || Math.abs(f.lon) > 180) {
+        return { error: 'Coordonnées hors limites : latitude entre −90 et 90, longitude entre −180 et 180.' };
+      }
+    }
+    if (alt) {
+      f.alt = num(alt);
+      if (!isFinite(f.alt)) return { error: 'Altitude invalide.' };
+    }
+    const filled = [f.dt, f.lat, f.make, f.model, f.artist, f.copy, f.desc].some((x) => x !== undefined && x !== '');
+    if (!filled) return { error: 'Renseignez au moins un champ.' };
+    return { f };
+  }
+
+  // Pre-fills the form with what the photo already contains.
+  function prefillAdd(rows) {
+    const get = (name) => { const r = rows.find((x) => x.name === name); return r ? r.value : ''; };
+    const dt = get('Date de prise de vue') || get('Date de modification');
+    const m = dt.match(/(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+    $('fDate').value = m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+    $('fTime').value = m ? m[4] + ':' + m[5] + ':' + m[6] : '';
+    const coords = get('Coordonnées (décimales)');
+    const parts = coords ? coords.split(',').map((s) => s.trim()) : [];
+    $('fLat').value = parts[0] || '';
+    $('fLon').value = parts[1] || '';
+    $('fAlt').value = '';
+    $('fMake').value = get('Fabricant');
+    $('fModel').value = get('Modèle');
+    $('fArtist').value = get('Auteur');
+    $('fCopy').value = get('Copyright');
+    $('fDesc').value = get('Description');
+  }
+
+  async function handleAdd(file) {
+    hideError('Add');
+    $('addForm').hidden = true;
+    $('addResult').hidden = true;
+    if (!['image/jpeg', 'image/png'].includes(file.type)) return showError('Add', 'L’ajout de métadonnées fonctionne avec les JPEG et les PNG.');
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      addSource = { file };
+      prefillAdd(readMetadata(buf, file.type).rows);
+      updateStampPreview();
+      $('addFile').textContent = file.name + ' · ' + fmtBytes(file.size);
+      $('addFile').hidden = false;
+      $('addForm').hidden = false;
+    } catch (err) {
+      showError('Add', 'Impossible de lire cette image : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
+    }
+  }
+
+  async function applyAdd(e) {
+    e.preventDefault();
+    hideError('Add');
+    if (!addSource) return;
+    const parsed = readAddForm();
+    if (parsed.error) return showError('Add', parsed.error);
+    try {
+      // Redraw first: this drops the old metadata, then the new block is written.
+      const img = new Image();
+      img.src = track(addSource.file);
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      // Visible stamp: burned into the pixels, so it stays even if metadata is removed later.
+      if (parsed.f.stamp) {
+        // The canvas can only use a web font once it is loaded.
+        await document.fonts.load('600 20px "Roboto Mono"').catch(() => {});
+        drawStamp(canvas.getContext('2d'), canvas.width, canvas.height, parsed.f);
+      }
+      const isPng = addSource.file.type === 'image/png';
+      const mime = isPng ? 'image/png' : 'image/jpeg';
+      const clean = await new Promise((res) => canvas.toBlob(res, mime, 0.92));
+      if (!clean) throw new Error('réencodage impossible dans ce navigateur');
+
+      const x = exifFromForm(parsed.f);
+      const tiff = buildTiff(x.ifd0, x.exif, x.gps);
+      const cleanBytes = new Uint8Array(await clean.arrayBuffer());
+      const out = isPng ? injectExifPng(cleanBytes, tiff) : injectExif(cleanBytes, tiff);
+      const outUrl = track(new Blob([out], { type: mime }));
+
+      const base = addSource.file.name.replace(/\.[^.]+$/, '');
+      const outName = base + '_metadonnees' + (isPng ? '.png' : '.jpg');
+      $('addImg').src = outUrl;
+      $('addDownload').href = outUrl;
+      $('addDownload').download = outName;
+      $('addName').textContent = outName;
+
+      // Read the new file back, so the user sees what was really written.
+      const facts = $('addFacts');
+      facts.textContent = '';
+      readMetadata(out, 'image/jpeg').rows
+        .filter((r) => ['Image', 'Prise de vue', 'GPS'].includes(r.group))
+        .forEach((r) => factRow(facts, r.name, r.value));
+      $('addResult').hidden = false;
+    } catch (err) {
+      showError('Add', 'Impossible de créer la copie : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
+    }
+  }
+
+  function wireDrop(dropId, pickId, inputId, handler) {
+    const drop = $(dropId);
+    const input = $(inputId);
+    $(pickId).addEventListener('click', () => input.click());
+    input.addEventListener('change', () => { if (input.files[0]) handler(input.files[0]); input.value = ''; });
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.add('over');
+    }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => {
+      e.preventDefault(); drop.classList.remove('over');
+    }));
+    drop.addEventListener('drop', (e) => {
+      const f = e.dataTransfer && e.dataTransfer.files[0];
+      if (f) handler(f);
+    });
+  }
+
+  $('tab-extract').addEventListener('click', () => selectTab('extract'));
+  $('tab-strip').addEventListener('click', () => selectTab('strip'));
+  $('tab-add').addEventListener('click', () => selectTab('add'));
+  $('addForm').addEventListener('submit', applyAdd);
+  $('addForm').addEventListener('input', updateStampPreview);
+  wireDrop('dropExtract', 'pickExtract', 'fileExtract', handleExtract);
+  wireDrop('dropStrip', 'pickStrip', 'fileStrip', handleStrip);
+  wireDrop('dropAdd', 'pickAdd', 'fileAdd', handleAdd);
+  $('metaQuery').addEventListener('input', filterMetadata);
+  $('copyMeta').addEventListener('click', copyMetadata);
+})();
+</script>
