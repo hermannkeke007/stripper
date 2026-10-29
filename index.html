@@ -164,6 +164,19 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 .verdict.good { background: var(--ok-bg); color: var(--ok); }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
 .name { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+.namebox { display: flex; align-items: center; gap: 4px; flex: 1 1 220px; min-width: 0; }
+.namebox input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+}
+.namebox .name { white-space: nowrap; color: var(--muted); }
 .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
 
 /* Extract panel */
@@ -349,7 +362,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       </div>
       <div class="actions">
         <a class="btn" id="download" href="#" download>Télécharger la copie propre</a>
-        <span class="name" id="outName"></span>
+        <div class="namebox"><input id="outBase" type="text" maxlength="100" aria-label="Nom du fichier"><span class="name" id="outExt"></span></div>
       </div>
       <p class="hint">Si le téléchargement est bloqué dans cet aperçu, faites un clic droit sur l'image de droite, puis « Enregistrer l'image sous ».</p>
     </section>
@@ -419,7 +432,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       </div>
       <div class="actions">
         <a class="btn" id="addDownload" href="#" download>Télécharger la copie</a>
-        <span class="name" id="addName"></span>
+        <div class="namebox"><input id="addBase" type="text" maxlength="100" aria-label="Nom du fichier"><span class="name" id="addExt"></span></div>
       </div>
       <p class="hint">Si le téléchargement est bloqué dans cet aperçu, faites un clic droit sur l'image, puis « Enregistrer l'image sous ».</p>
     </section>
@@ -1059,12 +1072,42 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 
       const dl = $('download');
       dl.href = outUrl;
-      dl.download = outName;
-      $('outName').textContent = outName;
+      setName('out', base + '_sans_metadonnees', ext, 'download');
       $('stripResult').hidden = false;
     } catch (err) {
       showError('Strip', 'Impossible de traiter cette image : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
     }
+  }
+
+  /* ---------- File names: suggested, then editable before download ---------- */
+
+  function sanitizeName(s) {
+    const clean = s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^[-.]+|[-.]+$/g, '')
+      .slice(0, 100);
+    return clean || 'photo';
+  }
+
+  // Suggests date and place from the stamp values, then the original name.
+  function suggestName(f, base) {
+    const parts = [];
+    if (f.dt) parts.push(f.dt.slice(0, 10).replace(/:/g, '-') + '_' + f.dt.slice(11, 16).replace(':', 'h'));
+    if (f.addr) parts.push(f.addr.split(',')[0]);
+    else if (f.lat !== undefined) parts.push(f.lat.toFixed(4) + '_' + f.lon.toFixed(4));
+    parts.push(base);
+    return parts.join('_');
+  }
+
+  // prefix: 'out' or 'add'. The download link follows the name typed by the user.
+  function setName(prefix, base, ext, linkId) {
+    const input = $(prefix + 'Base');
+    input.value = base;
+    $(prefix + 'Ext').textContent = ext;
+    const link = $(linkId);
+    const sync = () => { link.download = sanitizeName(input.value) + ext; };
+    input.oninput = sync;
+    sync();
   }
 
   /* ---------- Shared UI ---------- */
@@ -1405,11 +1448,9 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       const outUrl = track(new Blob([out], { type: mime }));
 
       const base = addSource.file.name.replace(/\.[^.]+$/, '');
-      const outName = base + '_metadonnees' + (isPng ? '.png' : '.jpg');
       $('addImg').src = outUrl;
       $('addDownload').href = outUrl;
-      $('addDownload').download = outName;
-      $('addName').textContent = outName;
+      setName('add', suggestName(parsed.f, base), isPng ? '.png' : '.jpg', 'addDownload');
 
       // Read the new file back, so the user sees what was really written.
       const facts = $('addFacts');
