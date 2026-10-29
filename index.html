@@ -1,4 +1,8 @@
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d6b62">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;600&display=swap">
 <title>Suppression de métadonnées</title>
@@ -297,7 +301,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     <div class="drop" id="dropExtract">
       <p>Glissez une image ici, ou choisissez-la.</p>
       <button class="btn" id="pickExtract" type="button">Choisir une image</button>
-      <input id="fileExtract" type="file" accept="image/jpeg,image/png,image/webp">
+      <input id="fileExtract" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
     </div>
 
     <div class="notice" id="errorExtract" hidden></div>
@@ -307,6 +311,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       <div class="toolbar">
         <input id="metaQuery" class="search" type="search" placeholder="Filtrer : GPS, date, appareil…" aria-label="Filtrer les métadonnées">
         <button class="btn ghost" id="copyMeta" type="button">Copier en texte</button>
+        <button class="btn ghost" id="exportMeta" type="button">Exporter en JSON</button>
         <span class="count" id="metaCount"></span>
       </div>
       <div id="sensSummary"></div>
@@ -322,7 +327,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     <div class="drop" id="dropStrip">
       <p>Glissez une image ici, ou choisissez-la.</p>
       <button class="btn" id="pickStrip" type="button">Choisir une image</button>
-      <input id="fileStrip" type="file" accept="image/jpeg,image/png,image/webp">
+      <input id="fileStrip" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
     </div>
 
     <div class="notice" id="errorStrip" hidden></div>
@@ -358,12 +363,13 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     <div class="drop" id="dropAdd">
       <p>Glissez une photo JPEG ici, ou choisissez-la.</p>
       <button class="btn" id="pickAdd" type="button">Choisir une image</button>
-      <input id="fileAdd" type="file" accept="image/jpeg,image/png">
+      <input id="fileAdd" type="file" accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif">
     </div>
 
     <div class="notice" id="errorAdd" hidden></div>
 
     <p class="fileline" id="addFile" hidden></p>
+    <div id="addWarn"></div>
     <form id="addForm" class="form" hidden>
       <fieldset class="fields">
         <legend>Date et heure de prise de vue</legend>
@@ -505,6 +511,36 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     }
     (kids || []).forEach((c) => n.append(c));
     return n;
+  }
+
+  /* ---------- HEIC: converted to JPEG in the browser before any other step ---------- */
+
+  const HEIC_URL = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+  let heicLoading = null;
+  const isHeic = (file) => /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+
+  // The converter (about 1.3 MB) is only downloaded when a HEIC file is actually chosen.
+  function loadHeic() {
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (!heicLoading) {
+      heicLoading = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = HEIC_URL;
+        s.async = true;
+        s.onload = () => resolve(window.heic2any);
+        s.onerror = () => { heicLoading = null; reject(new Error('convertisseur HEIC indisponible, vérifiez la connexion')); };
+        document.head.appendChild(s);
+      });
+    }
+    return heicLoading;
+  }
+
+  async function prepareFile(file) {
+    if (!isHeic(file)) return file;
+    const convert = await loadHeic();
+    const out = await convert({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+    const blob = Array.isArray(out) ? out[0] : out;
+    return new File([blob], file.name.replace(/\.(heic|heif)$/i, '') + '.jpg', { type: 'image/jpeg' });
   }
 
   /* ---------- EXIF / TIFF ---------- */
@@ -885,8 +921,10 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 
   async function handleExtract(file) {
     hideError('Extract');
-    if (!TYPES.includes(file.type)) return showError('Extract', 'Format non pris en charge. Utilisez un fichier JPEG, PNG ou WebP.');
     try {
+      file = await prepareFile(file);
+      if (!TYPES.includes(file.type)) return showError('Extract', 'Format non pris en charge. Utilisez un fichier JPEG, PNG, WebP ou HEIC.');
+      lastFileName = file.name;
       const buf = new Uint8Array(await file.arrayBuffer());
       $('extractFile').textContent = file.name + ' · ' + fmtBytes(file.size);
       renderMetadata(readMetadata(buf, file.type));
@@ -910,7 +948,9 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
           if (m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
           const len = (b[i + 2] << 8) | b[i + 3];
           const head = latin(b.subarray(i + 4, Math.min(i + 34, i + 2 + len)));
-          if (m >= 0xE1 && m <= 0xEF && m !== 0xE0) {
+          // The ICC colour profile (APP2) is not personal data: browsers add it, so it is not counted.
+          const isIcc = m === 0xE2 && head.startsWith('ICC_PROFILE');
+          if (m >= 0xE1 && m <= 0xEF && m !== 0xE0 && !isIcc) {
             let key = 'APP';
             if (head.startsWith('Exif')) key = 'EXIF';
             else if (head.startsWith('http://ns.adobe.com/xap')) key = 'XMP';
@@ -977,8 +1017,9 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 
   async function handleStrip(file) {
     hideError('Strip');
-    if (!TYPES.includes(file.type)) return showError('Strip', 'Format non pris en charge. Utilisez un fichier JPEG, PNG ou WebP.');
     try {
+      file = await prepareFile(file);
+      if (!TYPES.includes(file.type)) return showError('Strip', 'Format non pris en charge. Utilisez un fichier JPEG, PNG, WebP ou HEIC.');
       freeUrls();
       const buf = new Uint8Array(await file.arrayBuffer());
       const found = scanBlocks(buf, file.type);
@@ -1313,11 +1354,14 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     hideError('Add');
     $('addForm').hidden = true;
     $('addResult').hidden = true;
-    if (!['image/jpeg', 'image/png'].includes(file.type)) return showError('Add', 'L’ajout de métadonnées fonctionne avec les JPEG et les PNG.');
+    $('addWarn').textContent = '';
     try {
+      file = await prepareFile(file);
+      if (!['image/jpeg', 'image/png'].includes(file.type)) return showError('Add', 'L’ajout de métadonnées fonctionne avec les JPEG, les PNG et les HEIC.');
       const buf = new Uint8Array(await file.arrayBuffer());
-      addSource = { file };
-      prefillAdd(readMetadata(buf, file.type).rows);
+      const orig = readMetadata(buf, file.type).rows;
+      addSource = { file, rows: orig };
+      prefillAdd(orig);
       updateStampPreview();
       $('addFile').textContent = file.name + ' · ' + fmtBytes(file.size);
       $('addFile').hidden = false;
@@ -1333,6 +1377,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     if (!addSource) return;
     const parsed = readAddForm();
     if (parsed.error) return showError('Add', parsed.error);
+    renderWarnings(consistencyWarnings(parsed.f, addSource.rows || []));
     try {
       // Redraw first: this drops the old metadata, then the new block is written.
       const img = new Image();
@@ -1369,13 +1414,87 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       // Read the new file back, so the user sees what was really written.
       const facts = $('addFacts');
       facts.textContent = '';
-      readMetadata(out, 'image/jpeg').rows
+      readMetadata(out, mime).rows
         .filter((r) => ['Image', 'Prise de vue', 'GPS'].includes(r.group))
         .forEach((r) => factRow(facts, r.name, r.value));
       $('addResult').hidden = false;
     } catch (err) {
       showError('Add', 'Impossible de créer la copie : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
     }
+  }
+
+  /* ---------- Consistency check against the original photo ---------- */
+
+  // Compares what is about to be written with what the original photo already says.
+  function consistencyWarnings(f, rows) {
+    const get = (name) => { const r = rows.find((x) => x.name === name); return r ? r.value : ''; };
+    const out = [];
+    const shot = get('Date de prise de vue');
+    if (shot && f.dt && shot.slice(0, 16) !== f.dt.slice(0, 16)) {
+      out.push('Date saisie : ' + f.dt + '. Date de prise de vue dans la photo : ' + shot + '.');
+    }
+    const coords = get('Coordonnées (décimales)');
+    if (coords) {
+      const [la, lo] = coords.split(',').map((s) => Number(s.trim()));
+      if (f.lat === undefined) {
+        out.push('La photo contient une position GPS (' + coords + ') que vous n’avez pas reprise.');
+      } else if (Math.abs(la - f.lat) > 0.001 || Math.abs(lo - f.lon) > 0.001) {
+        out.push('Coordonnées saisies : ' + f.lat.toFixed(5) + ', ' + f.lon.toFixed(5) + '. Dans la photo : ' + coords + '.');
+      }
+    }
+    return out;
+  }
+
+  function renderWarnings(list) {
+    const box = $('addWarn');
+    box.textContent = '';
+    if (!list.length) return;
+    box.append(el('div', { class: 'sens-box' }, [
+      el('strong', { text: 'Incohérences avec la photo d’origine' }),
+      ...list.map((w) => el('p', { text: w })),
+      el('p', { class: 'sens-hint', text: 'Vérifiez ces valeurs avant de partager la copie.' })
+    ]));
+  }
+
+  /* ---------- Export (JSON) and remembered settings ---------- */
+
+  let lastFileName = '';
+
+  function exportMetadata() {
+    const data = {
+      fichier: lastFileName,
+      genere_le: new Date().toISOString(),
+      metadonnees: lastRows.map((r) => ({ groupe: r.group, champ: r.name, valeur: r.value }))
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (lastFileName || 'metadonnees').replace(/\.[^.]+$/, '') + '_metadonnees.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  const PREFS_KEY = 'metadata-stripper:prefs';
+  function loadPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+      if (typeof p.opacity === 'number') $('fOpacity').value = p.opacity;
+      if (typeof p.stamp === 'boolean') $('fStamp').checked = p.stamp;
+      if (typeof p.addr === 'string') $('fAddr').value = p.addr;
+      if (typeof p.label === 'string') $('fLabel').value = p.label;
+    } catch (e) { /* storage blocked or empty: keep the defaults */ }
+  }
+  function savePrefs() {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        opacity: Number($('fOpacity').value),
+        stamp: $('fStamp').checked,
+        addr: $('fAddr').value,
+        label: $('fLabel').value
+      }));
+    } catch (e) { /* storage blocked: nothing to do */ }
   }
 
   function wireDrop(dropId, pickId, inputId, handler) {
@@ -1400,10 +1519,17 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
   $('tab-add').addEventListener('click', () => selectTab('add'));
   $('addForm').addEventListener('submit', applyAdd);
   $('addForm').addEventListener('input', updateStampPreview);
+  $('addForm').addEventListener('input', savePrefs);
   wireDrop('dropExtract', 'pickExtract', 'fileExtract', handleExtract);
   wireDrop('dropStrip', 'pickStrip', 'fileStrip', handleStrip);
   wireDrop('dropAdd', 'pickAdd', 'fileAdd', handleAdd);
   $('metaQuery').addEventListener('input', filterMetadata);
   $('copyMeta').addEventListener('click', copyMetadata);
+  $('exportMeta').addEventListener('click', exportMetadata);
+  loadPrefs();
+  // Service worker: offline use once the site is hosted over HTTPS (e.g. GitHub Pages).
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
 })();
 </script>
