@@ -1,57 +1,57 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#1d6b62">
+<meta name="theme-color" content="#0b5f7a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=Roboto+Mono:wght@500;600&display=swap">
 <title>Suppression de métadonnées</title>
 <style>
 /* One page, two tools: "Extraire" (read every metadata block) and "Supprimer" (write a clean copy). */
 :root {
-  --bg: #f5f4f0;
+  --bg: #eef1f3;
   --surface: #ffffff;
-  --fg: #1c1f1d;
-  --muted: #6a706c;
-  --line: #e0dfd9;
-  --accent: #1d6b62;
+  --fg: #14202a;
+  --muted: #5b6b78;
+  --line: #d6dee4;
+  --accent: #0b5f7a;
   --accent-fg: #ffffff;
-  --warn: #8f5512;
-  --warn-bg: #f7ead8;
-  --ok: #2b6a3c;
-  --ok-bg: #e0f0e3;
+  --warn: #8a4b00;
+  --warn-bg: #fdf0dc;
+  --ok: #1d6b3a;
+  --ok-bg: #dff3e6;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #131514;
-    --surface: #1c1f1d;
-    --fg: #e7eae8;
-    --muted: #98a09b;
-    --line: #2d3331;
-    --accent: #5ab3a7;
-    --accent-fg: #0e1412;
-    --warn: #e2a866;
-    --warn-bg: #3a2c1a;
-    --ok: #7fc692;
-    --ok-bg: #1c3322;
+    --bg: #0d141a;
+    --surface: #152029;
+    --fg: #e6eef3;
+    --muted: #8fa0ad;
+    --line: #26343f;
+    --accent: #5fb8d6;
+    --accent-fg: #06121a;
+    --warn: #f0b76a;
+    --warn-bg: #3a2a14;
+    --ok: #7fd09a;
+    --ok-bg: #173223;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #131514;
-  --surface: #1c1f1d;
-  --fg: #e7eae8;
-  --muted: #98a09b;
-  --line: #2d3331;
-  --accent: #5ab3a7;
-  --accent-fg: #0e1412;
-  --warn: #e2a866;
-  --warn-bg: #3a2c1a;
-  --ok: #7fc692;
-  --ok-bg: #1c3322;
+  --bg: #0d141a;
+  --surface: #152029;
+  --fg: #e6eef3;
+  --muted: #8fa0ad;
+  --line: #26343f;
+  --accent: #5fb8d6;
+  --accent-fg: #06121a;
+  --warn: #f0b76a;
+  --warn-bg: #3a2a14;
+  --ok: #7fd09a;
+  --ok-bg: #173223;
   color-scheme: dark;
 }
 
@@ -298,6 +298,79 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 .journal { margin-top: 36px; }
 .journal > summary { cursor: pointer; list-style: revert; }
 .journal[open] > summary { margin-bottom: 4px; }
+
+/* Visual refresh: cool paper, ink text, one teal signal colour, mono for data. */
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1 { font-weight: 650; letter-spacing: -0.015em; }
+h2.sec { font-weight: 600; letter-spacing: -0.005em; }
+.panel-lede { font-size: 14px; }
+
+.tabs {
+  background: color-mix(in srgb, var(--fg) 7%, var(--bg));
+  border: 0;
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.tab { color: var(--muted); font-weight: 500; transition: background .15s, color .15s; }
+.tab[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 0 0 1px var(--line);
+}
+
+.drop {
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.drop p { color: var(--fg); font-weight: 500; }
+.drop.over { border-style: solid; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+
+.btn {
+  border-radius: 8px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  transition: filter .15s, background .15s;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn.ghost { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.btn.ghost:hover { filter: none; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+.card, .group, .fields {
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.card h3 { color: var(--accent); letter-spacing: 0.08em; }
+.facts li { padding: 7px 0; }
+.facts span:last-child { color: var(--fg); }
+
+.hash {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--fg) 6%, var(--surface));
+  color: var(--muted);
+}
+.verdict { letter-spacing: 0.01em; }
+.notice { border-left: 3px solid var(--warn); border-radius: 8px; }
+
+.fields legend { color: var(--accent); }
+.search:focus, .namebox input:focus, .fields input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.journal > summary { font-size: 16px; font-weight: 600; }
+.logList li { border-top-color: var(--line); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
 .logList { list-style: none; padding: 0; margin: 14px 0 0; }
 .logList li { padding: 10px 0; border-top: 1px solid rgba(0, 0, 0, 0.1); font-size: 14px; }
 .logList li.empty { color: var(--muted); border-top: 0; }
