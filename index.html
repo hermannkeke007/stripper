@@ -296,6 +296,8 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 }
 .hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; margin: 10px 0 0; }
 .journal { margin-top: 36px; }
+.journal > summary { cursor: pointer; list-style: revert; }
+.journal[open] > summary { margin-bottom: 4px; }
 .logList { list-style: none; padding: 0; margin: 14px 0 0; }
 .logList li { padding: 10px 0; border-top: 1px solid rgba(0, 0, 0, 0.1); font-size: 14px; }
 .logList li.empty { color: var(--muted); border-top: 0; }
@@ -359,19 +361,19 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
           <img class="thumb" id="origImg" alt="Image originale">
           <ul class="facts" id="origFacts"></ul>
           <div id="origVerdict"></div>
+          <p class="hash" id="origHash"></p>
         </article>
         <article class="card">
           <h3>Sans métadonnées</h3>
           <img class="thumb" id="outImg" alt="Image sans métadonnées">
           <ul class="facts" id="outFacts"></ul>
           <div id="outVerdict"></div>
+          <p class="hash" id="outHash"></p>
         </article>
       </div>
-      <p class="hash" id="origHash"></p>
-      <p class="hash" id="outHash"></p>
       <fieldset class="fields" id="zoneBox" hidden>
         <legend>Zones à pixeliser (optionnel)</legend>
-        <p class="hint" style="grid-column: 1 / -1">Glissez sur la photo de gauche pour couvrir un visage, une plaque ou une adresse, puis appliquez.</p>
+        <p class="hint" style="grid-column: 1 / -1">Glissez sur la photo ci-dessous pour couvrir un visage, une plaque ou une adresse, puis appliquez.</p>
         <canvas id="zoneCanvas" style="grid-column: 1 / -1; width: 100%; max-width: 520px; touch-action: none; cursor: crosshair; border-radius: 8px"></canvas>
         <div class="actions" style="grid-column: 1 / -1">
           <span class="count" id="zoneCount">0 zone</span>
@@ -459,15 +461,15 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     </section>
   </section>
 
-  <section class="journal" id="journal" aria-labelledby="journalTitle">
-    <h2 class="sec" id="journalTitle">Journal des actions</h2>
+  <details class="journal" id="journal">
+    <summary class="sec" id="journalTitle">Journal des actions</summary>
     <p class="panel-lede">Extractions, suppressions et ajouts faits dans ce navigateur, avec les empreintes SHA-256 des fichiers. Les images elles-mêmes ne sont pas conservées.</p>
     <div class="actions">
       <button class="btn ghost" id="journalExport" type="button">Exporter le journal (JSON)</button>
       <button class="btn ghost" id="journalClear" type="button">Vider le journal</button>
     </div>
     <ol class="logList" id="logList"></ol>
-  </section>
+  </details>
 
   <p class="footer">Traitement local : l'image est lue dans votre navigateur et n'est envoyée nulle part. Les formats HEIC ne sont pas pris en charge par le navigateur.</p>
 </div>
@@ -1149,7 +1151,13 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
   }
-  function showHash(id, label, hex) { $(id).textContent = label + ' · SHA-256 : ' + hex; }
+  // Short form on screen (fits a phone); the full value stays in the tooltip and the journal.
+  function shortHash(hex) { return hex.length > 40 ? hex.slice(0, 12) + '…' + hex.slice(-8) : hex; }
+  function showHash(id, label, hex) {
+    const node = $(id);
+    node.textContent = label + ' · SHA-256 ' + shortHash(hex);
+    node.title = hex;
+  }
 
   /* ---------- Keep date and device, drop the position (JPEG) ---------- */
 
@@ -1314,7 +1322,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       list.append(el('li', null, [
         el('strong', { text: e.action + ' · ' + e.fichier }),
         el('span', { class: 'when', text: ' ' + new Date(e.quand).toLocaleString('fr-FR') }),
-        el('div', { class: 'hash', text: e.detail || '' })
+        el('div', { class: 'hash', text: (e.detail || '').replace(/[0-9a-f]{64}/g, shortHash) })
       ]));
     });
   }
