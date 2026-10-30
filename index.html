@@ -5,7 +5,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=Roboto+Mono:wght@500;600&display=swap">
-<title>Suppression de métadonnées</title>
+<title>Métadonnées Photo</title>
 <style>
 /* One page, two tools: "Extraire" (read every metadata block) and "Supprimer" (write a clean copy). */
 :root {
@@ -382,7 +382,7 @@ h2.sec { font-weight: 600; letter-spacing: -0.005em; }
 </style>
 
 <div class="wrap">
-  <h1>Métadonnées d'image</h1>
+  <h1>Métadonnées Photo</h1>
   <p class="lede">Deux outils pour une même image : lire ce qu'elle cache, ou la nettoyer avant de la partager.</p>
   <button class="btn ghost theme-btn" id="themeToggle" type="button">Thème : automatique</button>
 
@@ -512,8 +512,8 @@ h2.sec { font-weight: 600; letter-spacing: -0.005em; }
         <label>Opacité du fond
           <span class="range-row"><input id="fOpacity" type="range" min="10" max="90" step="5" value="40" aria-describedby="fOpacityOut"><output id="fOpacityOut" for="fOpacity">40 %</output></span>
         </label>
+        <label>Texte libre <input id="fLabel" type="text" maxlength="80" placeholder="REP"></label>
         <label>Adresse <input id="fAddr" type="text" maxlength="120" placeholder="401 Rue Aoua Kéïta, Abidjan"></label>
-        <label>Texte libre <input id="fLabel" type="text" maxlength="80"></label>
         <p class="hint" id="stampPreview" style="grid-column: 1 / -1"></p>
       </fieldset>
       <div class="actions">
@@ -1603,8 +1603,10 @@ h2.sec { font-weight: 600; letter-spacing: -0.005em; }
 
   // Draws a dark band at the bottom left, like the timestamp overlays on field photos.
   // One line per filled item: date/time, coordinates, address, free text.
+  // Order follows the field photos: free text, date and time, GPS, address.
   function stampLinesFrom(f) {
     const lines = [];
+    if (f.label) lines.push(f.label);
     if (f.dt) {
       const [d, t] = f.dt.split(' ');
       const [y, mo, da] = d.split(':');
@@ -1612,7 +1614,6 @@ h2.sec { font-weight: 600; letter-spacing: -0.005em; }
     }
     if (f.lat !== undefined && f.lon !== undefined) lines.push(f.lat.toFixed(5) + ', ' + f.lon.toFixed(5));
     if (f.addr) lines.push(f.addr);
-    if (f.label) lines.push(f.label);
     return lines;
   }
 
