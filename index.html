@@ -294,6 +294,12 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
   .card { padding: 14px; }
   .sens-box .btn { width: 100%; }
 }
+.hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; margin: 10px 0 0; }
+.journal { margin-top: 36px; }
+.logList { list-style: none; padding: 0; margin: 14px 0 0; }
+.logList li { padding: 10px 0; border-top: 1px solid rgba(0, 0, 0, 0.1); font-size: 14px; }
+.logList li.empty { color: var(--muted); border-top: 0; }
+.logList .when { color: var(--muted); font-size: 12px; }
 </style>
 
 <div class="wrap">
@@ -321,6 +327,7 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
 
     <section id="extractResult" hidden>
       <p class="fileline" id="extractFile"></p>
+      <p class="hash" id="extractHash"></p>
       <div class="toolbar">
         <input id="metaQuery" class="search" type="search" placeholder="Filtrer : GPS, date, appareil…" aria-label="Filtrer les métadonnées">
         <button class="btn ghost" id="copyMeta" type="button">Copier en texte</button>
@@ -360,6 +367,19 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
           <div id="outVerdict"></div>
         </article>
       </div>
+      <p class="hash" id="origHash"></p>
+      <p class="hash" id="outHash"></p>
+      <fieldset class="fields" id="zoneBox" hidden>
+        <legend>Zones à pixeliser (optionnel)</legend>
+        <p class="hint" style="grid-column: 1 / -1">Glissez sur la photo de gauche pour couvrir un visage, une plaque ou une adresse, puis appliquez.</p>
+        <canvas id="zoneCanvas" style="grid-column: 1 / -1; width: 100%; max-width: 520px; touch-action: none; cursor: crosshair; border-radius: 8px"></canvas>
+        <div class="actions" style="grid-column: 1 / -1">
+          <span class="count" id="zoneCount">0 zone</span>
+          <button class="btn ghost" id="zoneClear" type="button">Effacer les zones</button>
+          <button class="btn ghost" id="zoneApply" type="button">Appliquer les zones</button>
+        </div>
+      </fieldset>
+      <label class="check"><input id="keepExif" type="checkbox"> Garder la date et l’appareil, retirer seulement la position GPS (JPEG)</label>
       <div class="actions">
         <a class="btn" id="download" href="#" download>Télécharger la copie propre</a>
         <div class="namebox"><input id="outBase" type="text" maxlength="100" aria-label="Nom du fichier"><span class="name" id="outExt"></span></div>
@@ -430,12 +450,23 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
           <ul class="facts" id="addFacts"></ul>
         </article>
       </div>
+      <p class="hash" id="addHash"></p>
       <div class="actions">
         <a class="btn" id="addDownload" href="#" download>Télécharger la copie</a>
         <div class="namebox"><input id="addBase" type="text" maxlength="100" aria-label="Nom du fichier"><span class="name" id="addExt"></span></div>
       </div>
       <p class="hint">Si le téléchargement est bloqué dans cet aperçu, faites un clic droit sur l'image, puis « Enregistrer l'image sous ».</p>
     </section>
+  </section>
+
+  <section class="journal" id="journal" aria-labelledby="journalTitle">
+    <h2 class="sec" id="journalTitle">Journal des actions</h2>
+    <p class="panel-lede">Extractions, suppressions et ajouts faits dans ce navigateur, avec les empreintes SHA-256 des fichiers. Les images elles-mêmes ne sont pas conservées.</p>
+    <div class="actions">
+      <button class="btn ghost" id="journalExport" type="button">Exporter le journal (JSON)</button>
+      <button class="btn ghost" id="journalClear" type="button">Vider le journal</button>
+    </div>
+    <ol class="logList" id="logList"></ol>
   </section>
 
   <p class="footer">Traitement local : l'image est lue dans votre navigateur et n'est envoyée nulle part. Les formats HEIC ne sont pas pris en charge par le navigateur.</p>
@@ -940,6 +971,9 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       lastFileName = file.name;
       const buf = new Uint8Array(await file.arrayBuffer());
       $('extractFile').textContent = file.name + ' · ' + fmtBytes(file.size);
+      const hash = await sha256Hex(buf);
+      showHash('extractHash', 'Fichier', hash);
+      logAction({ action: 'Extraction', fichier: file.name, detail: 'SHA-256 ' + hash });
       renderMetadata(readMetadata(buf, file.type));
       $('extractResult').hidden = false;
       if ($('extractResult').scrollIntoView) $('extractResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1034,13 +1068,20 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       file = await prepareFile(file);
       if (!TYPES.includes(file.type)) return showError('Strip', 'Format non pris en charge. Utilisez un fichier JPEG, PNG, WebP ou HEIC.');
       freeUrls();
+      // A new photo resets the zones; re-running on the same photo keeps them.
+      if (!stripSource || stripSource.file !== file) { stripZones = []; stripSource = { file, img: null }; }
       const buf = new Uint8Array(await file.arrayBuffer());
       const found = scanBlocks(buf, file.type);
+      const hash = await sha256Hex(buf);
+      showHash('origHash', 'Original', hash);
       const srcUrl = track(file);
 
       const img = new Image();
       img.src = srcUrl;
       await img.decode();
+      stripSource.img = img;
+      $('zoneBox').hidden = false;
+      drawZonePreview();
       const w = img.naturalWidth;
       const h = img.naturalHeight;
 
@@ -1050,11 +1091,26 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       canvas.width = w;
       canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0);
+      pixelateZones(canvas.getContext('2d'), stripZones);
       const blob = await new Promise((res) => canvas.toBlob(res, file.type, 0.92));
       if (!blob) throw new Error('réencodage impossible dans ce navigateur');
 
-      const outUrl = track(blob);
-      const outFound = scanBlocks(new Uint8Array(await blob.arrayBuffer()), file.type);
+      // Optional: keep the date and device from the original, but never the position.
+      let outBlob = blob;
+      if ($('keepExif').checked && file.type === 'image/jpeg') {
+        const tiff = findExifTiff(buf);
+        if (tiff) {
+          const raw = rawExifWithoutGps(tiff);
+          const cleanBytes = new Uint8Array(await blob.arrayBuffer());
+          outBlob = new Blob([injectExif(cleanBytes, buildTiff(raw.ifd0, raw.exif, []))], { type: 'image/jpeg' });
+        }
+      }
+
+      const outUrl = track(outBlob);
+      const outBytes = new Uint8Array(await outBlob.arrayBuffer());
+      const outFound = scanBlocks(outBytes, file.type);
+      const outHash = await sha256Hex(outBytes);
+      showHash('outHash', 'Copie', outHash);
 
       const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
       const base = file.name.replace(/\.[^.]+$/, '');
@@ -1068,15 +1124,216 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       factRow($('origFacts'), 'Dimensions', w + ' × ' + h + ' px');
       factRow($('origFacts'), 'Taille', fmtBytes(file.size));
       factRow($('outFacts'), 'Dimensions', w + ' × ' + h + ' px');
-      factRow($('outFacts'), 'Taille', fmtBytes(blob.size));
+      factRow($('outFacts'), 'Taille', fmtBytes(outBlob.size));
 
       const dl = $('download');
       dl.href = outUrl;
       setName('out', base + '_sans_metadonnees', ext, 'download');
       $('stripResult').hidden = false;
+      logAction({
+        action: 'Suppression',
+        fichier: file.name,
+        detail: 'Original ' + hash + ' → copie ' + outHash +
+          (stripZones.length ? ' · ' + stripZones.length + ' zone(s) pixélisée(s)' : '') +
+          ($('keepExif').checked && outBlob !== blob ? ' · position GPS retirée, date et appareil gardés' : '')
+      });
     } catch (err) {
       showError('Strip', 'Impossible de traiter cette image : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
     }
+  }
+
+  /* ---------- Integrity: SHA-256 of the original and of the copy ---------- */
+
+  async function sha256Hex(bytes) {
+    if (!window.crypto || !crypto.subtle) return 'indisponible (page non sécurisée)';
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  function showHash(id, label, hex) { $(id).textContent = label + ' · SHA-256 : ' + hex; }
+
+  /* ---------- Keep date and device, drop the position (JPEG) ---------- */
+
+  // Returns the TIFF block of the Exif segment, or null.
+  function findExifTiff(b) {
+    let i = 2;
+    while (i + 4 <= b.length && b[i] === 0xFF) {
+      const m = b[i + 1];
+      if (m === 0xDA || m === 0xD9) break;
+      if (m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+      const len = (b[i + 2] << 8) | b[i + 3];
+      if (m === 0xE1 && latin(b.subarray(i + 4, i + 10)) === 'Exif\u0000\u0000') return b.subarray(i + 10, i + 2 + len);
+      i += 2 + len;
+    }
+    return null;
+  }
+
+  // Copies the raw entries of IFD0 and the Exif sub-directory, without the GPS
+  // pointer and without the thumbnail (IFD1), which can show the place too.
+  function rawExifWithoutGps(t) {
+    const le = String.fromCharCode(t[0], t[1]) === 'II';
+    const dv = new DataView(t.buffer, t.byteOffset, t.byteLength);
+    const u16 = (o) => dv.getUint16(o, le);
+    const u32 = (o) => dv.getUint32(o, le);
+    const readRaw = (off) => {
+      const out = [];
+      if (!off || off + 2 > t.length) return out;
+      const n = u16(off);
+      for (let k = 0; k < n; k++) {
+        const e = off + 2 + k * 12;
+        if (e + 12 > t.length) break;
+        const tag = u16(e), type = u16(e + 2), count = u32(e + 4);
+        if (!TYPE_SIZE[type]) continue;
+        const size = TYPE_SIZE[type] * count;
+        const at = size <= 4 ? e + 8 : u32(e + 8);
+        if (at + size > t.length) continue;
+        out.push({ tag, type, count, bytes: t.slice(at, at + size) });
+      }
+      return out;
+    };
+    const pointer = (list, tag) => {
+      const e = list.find((x) => x.tag === tag);
+      return e ? new DataView(e.bytes.buffer, e.bytes.byteOffset, 4).getUint32(0, le) : 0;
+    };
+    const ifd0 = readRaw(u32(4));
+    const exif = readRaw(pointer(ifd0, 0x8769));
+    const keep = (list) => list.filter((e) => e.tag !== 0x8769 && e.tag !== 0x8825);
+    return { ifd0: keep(ifd0), exif: keep(exif) };
+  }
+
+  /* ---------- Zones to pixelate (Supprimer tab) ---------- */
+
+  let stripSource = null;   // {file, img}
+  let stripZones = [];      // rectangles in the photo's own pixels
+  let zoneDrag = null;      // start point while the user drags
+
+  // Pixelation works on every browser, unlike ctx.filter (blur) which Safari lacks.
+  function pixelateZones(ctx, zones) {
+    zones.forEach((z) => {
+      const x = Math.round(z.x), y = Math.round(z.y), w = Math.round(z.w), h = Math.round(z.h);
+      if (w < 2 || h < 2) return;
+      const k = Math.max(6, Math.round(Math.min(w, h) / 6));
+      const tmp = document.createElement('canvas');
+      tmp.width = Math.max(1, Math.round(w / k));
+      tmp.height = Math.max(1, Math.round(h / k));
+      tmp.getContext('2d').drawImage(ctx.canvas, x, y, w, h, 0, 0, tmp.width, tmp.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(tmp, 0, 0, tmp.width, tmp.height, x, y, w, h);
+      ctx.imageSmoothingEnabled = true;
+    });
+  }
+
+  function normRect(a, b) {
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
+  }
+
+  function drawZonePreview(extra) {
+    const c = $('zoneCanvas');
+    const img = stripSource && stripSource.img;
+    if (!img) return;
+    const scale = Math.min(1, 1000 / img.naturalWidth);
+    c.width = Math.round(img.naturalWidth * scale);
+    c.height = Math.round(img.naturalHeight * scale);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    ctx.lineWidth = 2;
+    stripZones.forEach((z) => {
+      ctx.fillStyle = 'rgba(224, 162, 90, 0.35)';
+      ctx.strokeStyle = '#e0a25a';
+      ctx.fillRect(z.x * scale, z.y * scale, z.w * scale, z.h * scale);
+      ctx.strokeRect(z.x * scale, z.y * scale, z.w * scale, z.h * scale);
+    });
+    if (extra) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.strokeStyle = '#ffffff';
+      ctx.fillRect(extra.x * scale, extra.y * scale, extra.w * scale, extra.h * scale);
+      ctx.strokeRect(extra.x * scale, extra.y * scale, extra.w * scale, extra.h * scale);
+    }
+    $('zoneCount').textContent = stripZones.length + (stripZones.length > 1 ? ' zones' : ' zone');
+  }
+
+  // Maps a pointer position to the photo's own pixels, whatever the displayed size.
+  function zonePoint(e) {
+    const c = $('zoneCanvas');
+    const img = stripSource.img;
+    const r = c.getBoundingClientRect();
+    return {
+      x: Math.min(img.naturalWidth, Math.max(0, (e.clientX - r.left) * (img.naturalWidth / r.width))),
+      y: Math.min(img.naturalHeight, Math.max(0, (e.clientY - r.top) * (img.naturalHeight / r.height)))
+    };
+  }
+
+  function wireZones() {
+    const c = $('zoneCanvas');
+    c.addEventListener('pointerdown', (e) => {
+      if (!stripSource || !stripSource.img) return;
+      zoneDrag = zonePoint(e);
+      c.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    c.addEventListener('pointermove', (e) => {
+      if (zoneDrag) drawZonePreview(normRect(zoneDrag, zonePoint(e)));
+    });
+    c.addEventListener('pointerup', (e) => {
+      if (!zoneDrag) return;
+      const z = normRect(zoneDrag, zonePoint(e));
+      zoneDrag = null;
+      if (z.w > 8 && z.h > 8) stripZones.push(z);
+      drawZonePreview();
+    });
+    $('zoneClear').addEventListener('click', () => { stripZones = []; drawZonePreview(); });
+    $('zoneApply').addEventListener('click', () => { if (stripSource) handleStrip(stripSource.file); });
+    $('keepExif').addEventListener('change', () => { if (stripSource) handleStrip(stripSource.file); });
+  }
+
+  /* ---------- Journal: what was done, kept in this browser ---------- */
+
+  const LOG_KEY = 'metadata-stripper:journal';
+  let journal = [];
+
+  function loadJournal() {
+    try { journal = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (e) { journal = []; }
+    if (!Array.isArray(journal)) journal = [];
+    renderJournal();
+  }
+
+  function logAction(entry) {
+    journal.unshift(Object.assign({ quand: new Date().toISOString() }, entry));
+    journal = journal.slice(0, 200);
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(journal)); } catch (e) { /* storage blocked: kept for this visit */ }
+    renderJournal();
+  }
+
+  function renderJournal() {
+    const list = $('logList');
+    list.textContent = '';
+    if (!journal.length) {
+      list.append(el('li', { class: 'empty', text: 'Aucune action pour l’instant.' }));
+      return;
+    }
+    journal.forEach((e) => {
+      list.append(el('li', null, [
+        el('strong', { text: e.action + ' · ' + e.fichier }),
+        el('span', { class: 'when', text: ' ' + new Date(e.quand).toLocaleString('fr-FR') }),
+        el('div', { class: 'hash', text: e.detail || '' })
+      ]));
+    });
+  }
+
+  function exportJournal() {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(journal, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'journal_metadonnees.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function clearJournal() {
+    journal = [];
+    try { localStorage.removeItem(LOG_KEY); } catch (e) { /* nothing stored */ }
+    renderJournal();
   }
 
   /* ---------- File names: suggested, then editable before download ---------- */
@@ -1386,11 +1643,12 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
     $('fLat').value = parts[0] || '';
     $('fLon').value = parts[1] || '';
     $('fAlt').value = '';
-    $('fMake').value = get('Fabricant');
-    $('fModel').value = get('Modèle');
-    $('fArtist').value = get('Auteur');
-    $('fCopy').value = get('Copyright');
-    $('fDesc').value = get('Description');
+    // Only overwrite with values the photo really has, so saved settings survive.
+    if (get('Fabricant')) $('fMake').value = get('Fabricant');
+    if (get('Modèle')) $('fModel').value = get('Modèle');
+    if (get('Auteur')) $('fArtist').value = get('Auteur');
+    if (get('Copyright')) $('fCopy').value = get('Copyright');
+    if (get('Description')) $('fDesc').value = get('Description');
   }
 
   async function handleAdd(file) {
@@ -1458,7 +1716,16 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       readMetadata(out, mime).rows
         .filter((r) => ['Image', 'Prise de vue', 'GPS'].includes(r.group))
         .forEach((r) => factRow(facts, r.name, r.value));
+      const outHash = await sha256Hex(out);
+      showHash('addHash', 'Copie', outHash);
       $('addResult').hidden = false;
+      logAction({
+        action: 'Ajout de métadonnées',
+        fichier: addSource.file.name,
+        detail: 'Copie ' + suggestName(parsed.f, base) + (isPng ? '.png' : '.jpg') + ' · SHA-256 ' + outHash + ' · date ' + (parsed.f.dt || '—') +
+          ' · position ' + (parsed.f.lat !== undefined ? parsed.f.lat + ', ' + parsed.f.lon : '—') +
+          (parsed.f.stamp ? ' · bandeau incrusté' : '')
+      });
     } catch (err) {
       showError('Add', 'Impossible de créer la copie : ' + (err && err.message ? err.message : 'erreur inconnue') + '.');
     }
@@ -1525,6 +1792,8 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
       if (typeof p.stamp === 'boolean') $('fStamp').checked = p.stamp;
       if (typeof p.addr === 'string') $('fAddr').value = p.addr;
       if (typeof p.label === 'string') $('fLabel').value = p.label;
+      if (typeof p.artist === 'string') $('fArtist').value = p.artist;
+      if (typeof p.copy === 'string') $('fCopy').value = p.copy;
     } catch (e) { /* storage blocked or empty: keep the defaults */ }
   }
   function savePrefs() {
@@ -1533,7 +1802,9 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
         opacity: Number($('fOpacity').value),
         stamp: $('fStamp').checked,
         addr: $('fAddr').value,
-        label: $('fLabel').value
+        label: $('fLabel').value,
+        artist: $('fArtist').value,
+        copy: $('fCopy').value
       }));
     } catch (e) { /* storage blocked: nothing to do */ }
   }
@@ -1568,6 +1839,10 @@ h2.sec { font-size: 17px; margin: 0 0 4px; text-wrap: balance; }
   $('copyMeta').addEventListener('click', copyMetadata);
   $('exportMeta').addEventListener('click', exportMetadata);
   loadPrefs();
+  loadJournal();
+  wireZones();
+  $('journalExport').addEventListener('click', exportJournal);
+  $('journalClear').addEventListener('click', clearJournal);
   // Service worker: offline use once the site is hosted over HTTPS (e.g. GitHub Pages).
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
