@@ -491,9 +491,10 @@ h2.sec { font-weight: 600; letter-spacing: -0.005em; }
       </fieldset>
       <fieldset class="fields">
         <legend>Position GPS</legend>
-        <label>Latitude (ex. 5.35300) <input id="fLat" type="text" inputmode="decimal" placeholder="5.35300"></label>
-        <label>Longitude (ex. -3.99653) <input id="fLon" type="text" inputmode="decimal" placeholder="-3.99653"></label>
-        <label>Altitude (m) <input id="fAlt" type="text" inputmode="decimal"></label>
+        <label>Latitude (ex. 5.35300) <input id="fLat" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" spellcheck="false" placeholder="5.35300"></label>
+        <label>Longitude (ex. -4.02377) <input id="fLon" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" spellcheck="false" placeholder="-4.02377"></label>
+        <label>Altitude (m) <input id="fAlt" type="text" inputmode="text" enterkeyhint="next" autocomplete="off" spellcheck="false"></label>
+        <p class="hint" style="grid-column: 1 / -1">Le signe <strong>-</strong> marque l’ouest (longitude) et le sud (latitude). À Abidjan, la longitude est négative : tapez-la avec le <strong>-</strong>, sur la page des symboles du clavier si besoin.</p>
       </fieldset>
       <fieldset class="fields">
         <legend>Appareil et auteur</legend>
